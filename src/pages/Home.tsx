@@ -215,7 +215,7 @@ export default function Home() {
             <VegNonVegToggle 
               isVeg={isVegOnly} 
               onToggle={setIsVegOnly}
-              className="animate-food-pulse"
+              className="animate-float"
             />
             
             <div className="flex items-center gap-2 text-sm text-muted-foreground">

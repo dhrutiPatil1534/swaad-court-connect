@@ -10,6 +10,8 @@ import { Header } from "@/components/layout/Header";
 import { BottomNav } from "@/components/layout/BottomNav";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
+import Restaurant from "./pages/Restaurant";
+import Cart from "./pages/Cart";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -55,12 +57,18 @@ const App = () => (
                   } 
                 />
                 <Route 
+                  path="/restaurant/:id" 
+                  element={
+                    <AppLayout>
+                      <Restaurant />
+                    </AppLayout>
+                  } 
+                />
+                <Route 
                   path="/cart" 
                   element={
                     <AppLayout>
-                      <div className="container mx-auto px-4 py-8">
-                        <h1 className="text-3xl font-bold">Cart - Coming Soon</h1>
-                      </div>
+                      <Cart />
                     </AppLayout>
                   } 
                 />
