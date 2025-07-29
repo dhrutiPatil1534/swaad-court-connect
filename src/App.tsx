@@ -9,6 +9,7 @@ import { CartProvider } from "@/contexts/CartContext";
 import { Header } from "@/components/layout/Header";
 import { BottomNav } from "@/components/layout/BottomNav";
 import Home from "./pages/Home";
+import Restaurants from "./pages/Restaurants";
 import Login from "./pages/Login";
 import Restaurant from "./pages/Restaurant";
 import Cart from "./pages/Cart";
@@ -50,9 +51,7 @@ const App = () => (
                   path="/restaurants" 
                   element={
                     <AppLayout>
-                      <div className="container mx-auto px-4 py-8">
-                        <h1 className="text-3xl font-bold">Restaurants - Coming Soon</h1>
-                      </div>
+                      <Restaurants />
                     </AppLayout>
                   } 
                 />

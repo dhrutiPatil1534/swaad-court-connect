@@ -20,9 +20,8 @@ export function BottomNav() {
 
   const navItems = [
     { path: '/', icon: Home, label: 'Home' },
-    { path: '/restaurants', icon: Search, label: 'Explore' },
+    { path: '/restaurants', icon: Search, label: 'Restaurants' },
     { path: '/cart', icon: ShoppingCart, label: 'Cart', badge: totalItems },
-    { path: '/orders', icon: Clock, label: 'Orders' },
     { path: '/profile', icon: User, label: 'Profile' },
   ];
 

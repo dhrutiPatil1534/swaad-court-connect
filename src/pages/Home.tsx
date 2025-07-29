@@ -161,20 +161,20 @@ export default function Home() {
         </div>
         
         <div className="relative z-10 container mx-auto px-4 h-full flex flex-col justify-center">
-          <div className="max-w-2xl animate-food-bounce">
-            <h1 className="text-4xl md:text-6xl font-heading font-bold text-white mb-4 text-glow">
+          <div className="max-w-2xl animate-fade-in">
+            <h1 className="text-4xl md:text-6xl font-heading font-bold text-white mb-4 text-glow animate-fade-in animation-delay-200">
               Savor Every
-              <span className="bg-gradient-primary bg-clip-text text-transparent block">
+              <span className="bg-gradient-primary bg-clip-text text-transparent block animate-fade-in animation-delay-400">
                 Bite
               </span>
             </h1>
-            <p className="text-lg md:text-xl text-white/90 mb-8 font-medium">
+            <p className="text-lg md:text-xl text-white/90 mb-8 font-medium animate-fade-in animation-delay-600">
               Order from multiple restaurants in one place. 
               <br className="hidden md:block" />
               Unified cart, single payment, endless flavor!
             </p>
             
-            <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex flex-col sm:flex-row gap-4 animate-fade-in animation-delay-800">
               <Button 
                 variant="food" 
                 size="lg" 
@@ -215,7 +215,7 @@ export default function Home() {
             <VegNonVegToggle 
               isVeg={isVegOnly} 
               onToggle={setIsVegOnly}
-              className="animate-float"
+              className="animate-fade-in"
             />
             
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
