@@ -18,7 +18,7 @@ export function VegNonVegToggle({ isVeg, onToggle, className }: VegNonVegToggleP
         onClick={() => onToggle(true)}
         className={cn(
           "flex items-center gap-1 transition-all duration-300",
-          isVeg && "shadow-lg animate-float"
+          isVeg && "shadow-lg"
         )}
       >
         <Leaf className="h-4 w-4" />
@@ -31,7 +31,7 @@ export function VegNonVegToggle({ isVeg, onToggle, className }: VegNonVegToggleP
         onClick={() => onToggle(false)}
         className={cn(
           "flex items-center gap-1 transition-all duration-300",
-          !isVeg && "shadow-lg animate-float"
+          !isVeg && "shadow-lg"
         )}
       >
         <Beef className="h-4 w-4" />
@@ -57,8 +57,8 @@ export function VegNonVegIndicator({ isVeg, size = 'md', className }: VegNonVegI
   return (
     <div 
       className={cn(
-        "flex items-center justify-center rounded border-2 animate-pulse",
-        isVeg 
+        "flex items-center justify-center rounded border-2",
+        isVeg
           ? "border-veg bg-veg/10 text-veg" 
           : "border-non-veg bg-non-veg/10 text-non-veg",
         sizeClasses[size],
