@@ -215,7 +215,7 @@ export default function Home() {
             <VegNonVegToggle 
               isVeg={isVegOnly} 
               onToggle={setIsVegOnly}
-              className="animate-fade-in"
+              className=""
             />
             
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -392,10 +392,7 @@ export default function Home() {
                     key={category}
                     variant="secondary"
                     size="sm"
-                    className={cn(
-                      "bg-white/20 backdrop-blur-sm border border-white/30 text-white hover:bg-white/30 animate-float",
-                      `animation-delay-${index * 200}`
-                    )}
+                    className="bg-white/20 backdrop-blur-sm border border-white/30 text-white hover:bg-white/30"
                     asChild
                   >
                     <Link to={`/restaurants?category=${category.toLowerCase()}`}>
