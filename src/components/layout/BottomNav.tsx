@@ -35,7 +35,7 @@ export function BottomNav() {
             className={cn(
               "flex flex-col items-center gap-1 px-3 py-2 rounded-lg transition-all duration-300",
               isActive(path) 
-                ? "text-primary bg-primary/10 animate-food-bounce" 
+                ? "text-primary bg-primary/10" 
                 : "text-muted-foreground hover:text-primary hover:bg-primary/5"
             )}
           >
@@ -44,7 +44,7 @@ export function BottomNav() {
               {badge && badge > 0 && (
                 <Badge 
                   variant="destructive" 
-                  className="absolute -top-2 -right-2 h-4 w-4 flex items-center justify-center p-0 text-xs animate-cart-bounce"
+                  className="absolute -top-2 -right-2 h-4 w-4 flex items-center justify-center p-0 text-xs "
                 >
                   {badge > 9 ? '9+' : badge}
                 </Badge>

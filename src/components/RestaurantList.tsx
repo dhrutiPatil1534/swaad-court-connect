@@ -174,10 +174,7 @@ export function RestaurantList() {
                         <Clock className="h-4 w-4" />
                         <span>{restaurant.deliveryTime}</span>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <MapPin className="h-4 w-4" />
-                        <span>{restaurant.distance}</span>
-                      </div>
+                    
                     </div>
                   </div>
                 </div>
