@@ -8,7 +8,7 @@ import {
   Clock
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { useCart } from '@/contexts/CartContext';
+import { useCart } from '@/context/cart-context';
 import { cn } from '@/lib/utils';
 
 export function BottomNav() {

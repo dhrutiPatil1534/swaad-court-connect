@@ -23,6 +23,8 @@ interface CartItem {
   customizations?: SelectedCustomization[];
   specialInstructions?: string;
   spiceLevel?: number;
+  uniqueId: string; // Unique identifier for cart items
+  totalPrice: number; // Total price including customizations
 }
 
 interface CartContextType {
@@ -83,17 +85,18 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
     const itemIdentifier = getItemIdentifier(item, customizations, specialInstructions);
     const customizationPrice = getItemCustomizationPrice(customizations);
+    const totalPrice = item.price + customizationPrice;
 
     setItems(prevItems => {
       const existingItemIndex = prevItems.findIndex(
-        cartItem => getItemIdentifier(cartItem as MenuItem, cartItem.customizations, cartItem.specialInstructions) === itemIdentifier
+        cartItem => cartItem.uniqueId === itemIdentifier
       );
 
       if (existingItemIndex >= 0) {
         // Update quantity of existing item
         return prevItems.map((cartItem, index) =>
           index === existingItemIndex
-            ? { ...cartItem, quantity: cartItem.quantity + 1 }
+            ? { ...cartItem, quantity: cartItem.quantity + 1, totalPrice: cartItem.totalPrice + (totalPrice / cartItem.quantity) }
             : cartItem
         );
       }
@@ -102,7 +105,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       return [...prevItems, {
         id: item.id,
         name: item.name,
-        price: item.price + customizationPrice,
+        price: item.price,
         quantity: 1,
         restaurantId,
         restaurantName,
@@ -110,13 +113,15 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         isVeg: item.isVeg,
         customizations,
         specialInstructions,
-        spiceLevel: item.spiceLevel
+        spiceLevel: item.spiceLevel,
+        uniqueId: itemIdentifier,
+        totalPrice: totalPrice
       }];
     });
   };
 
   const removeItem = (itemId: string) => {
-    setItems(prevItems => prevItems.filter(item => item.id !== itemId));
+    setItems(prevItems => prevItems.filter(item => item.uniqueId !== itemId));
   };
 
   const updateQuantity = (itemId: string, quantity: number) => {
@@ -124,9 +129,15 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
     setItems(prevItems =>
       quantity === 0
-        ? prevItems.filter(item => item.id !== itemId)
+        ? prevItems.filter(item => item.uniqueId !== itemId)
         : prevItems.map(item =>
-            item.id === itemId ? { ...item, quantity } : item
+            item.uniqueId === itemId 
+              ? { 
+                  ...item, 
+                  quantity, 
+                  totalPrice: (item.price + getItemCustomizationPrice(item.customizations)) * quantity 
+                } 
+              : item
           )
     );
   };
@@ -136,7 +147,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   };
 
   const getTotalPrice = () => {
-    return items.reduce((total, item) => total + (item.price * item.quantity), 0);
+    return items.reduce((total, item) => total + item.totalPrice, 0);
   };
 
   const getTotalItems = () => {

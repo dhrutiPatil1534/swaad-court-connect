@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Search, 
@@ -17,127 +17,58 @@ import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import heroImage from '@/assets/hero-food-court.jpg';
 import foodCategories from '@/assets/food-categories.jpg';
 import { cn } from '@/lib/utils';
+import { fetchRestaurants, fetchRestaurantMenu, Restaurant, MenuItem } from '@/lib/firebase';
 
-interface Restaurant {
-  id: string;
-  name: string;
-  image: string;
-  rating: number;
-  deliveryTime: string;
-  cuisine: string[];
-  isVeg: boolean;
-  isPopular?: boolean;
-  distance: string;
-  offers?: string;
-}
-
-interface FoodItem {
-  id: string;
-  name: string;
-  price: number;
-  image: string;
-  rating: number;
+interface FoodItem extends MenuItem {
   restaurantName: string;
-  isVeg: boolean;
-  isTrending?: boolean;
-  description: string;
 }
-
-const mockRestaurants: Restaurant[] = [
-  {
-    id: '1',
-    name: 'Burger King',
-    image: 'https://images.unsplash.com/photo-1571091718767-18b5b1457add?w=400',
-    rating: 4.2,
-    deliveryTime: '15-20 min',
-    cuisine: ['Burgers', 'Fast Food'],
-    isVeg: false,
-    isPopular: true,
-    distance: '0.2 km',
-    offers: '20% OFF'
-  },
-  {
-    id: '2',
-    name: 'Pizza Hut',
-    image: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=400',
-    rating: 4.5,
-    deliveryTime: '25-30 min',
-    cuisine: ['Pizza', 'Italian'],
-    isVeg: false,
-    isPopular: true,
-    distance: '0.3 km',
-    offers: 'Buy 1 Get 1'
-  },
-  {
-    id: '3',
-    name: 'Fassos',
-    image: 'https://images.unsplash.com/photo-1626645738196-c2a7c87a8f58?w=400',
-    rating: 4.0,
-    deliveryTime: '20-25 min',
-    cuisine: ['Wraps', 'Indian'],
-    isVeg: false,
-    distance: '0.1 km'
-  },
-  {
-    id: '4',
-    name: 'Dominos',
-    image: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ca4b?w=400',
-    rating: 4.3,
-    deliveryTime: '30-35 min',
-    cuisine: ['Pizza', 'Fast Food'],
-    isVeg: false,
-    distance: '0.4 km',
-    offers: '30% OFF'
-  }
-];
-
-const mockTrendingItems: FoodItem[] = [
-  {
-    id: '1',
-    name: 'Chicken Whopper',
-    price: 299,
-    image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=400',
-    rating: 4.5,
-    restaurantName: 'Burger King',
-    isVeg: false,
-    isTrending: true,
-    description: 'Flame-grilled beef patty with fresh vegetables'
-  },
-  {
-    id: '2',
-    name: 'Margherita Pizza',
-    price: 399,
-    image: 'https://images.unsplash.com/photo-1574071318508-1cdbab80d002?w=400',
-    rating: 4.3,
-    restaurantName: 'Pizza Hut',
-    isVeg: true,
-    isTrending: true,
-    description: 'Classic pizza with tomato sauce and mozzarella'
-  },
-  {
-    id: '3',
-    name: 'Chicken Kathi Roll',
-    price: 179,
-    image: 'https://images.unsplash.com/photo-1626645738196-c2a7c87a8f58?w=400',
-    rating: 4.4,
-    restaurantName: 'Fassos',
-    isVeg: false,
-    isTrending: true,
-    description: 'Spicy chicken wrapped in soft paratha'
-  }
-];
 
 export default function Home() {
   const [isVegOnly, setIsVegOnly] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
+  const [trendingItems, setTrendingItems] = useState<FoodItem[]>([]);
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        // Fetch restaurants
+        const fetchedRestaurants = await fetchRestaurants();
+        setRestaurants(fetchedRestaurants);
+
+        // Fetch menu items from each restaurant
+        const menuPromises = fetchedRestaurants.map(async (restaurant) => {
+          const menuItems = await fetchRestaurantMenu(restaurant.id);
+          return menuItems.map(item => ({
+            ...item,
+            restaurantName: restaurant.name
+          }));
+        });
+
+        const allMenuItems = await Promise.all(menuPromises);
+        const trendingMenuItems = allMenuItems
+          .flat()
+          .filter(item => item.isPopular)
+          .slice(0, 3);
+
+        setTrendingItems(trendingMenuItems);
+        setIsLoading(false);
+      } catch (error) {
+        console.error('Error loading data:', error);
+        setIsLoading(false);
+      }
+    }
+
+    loadData();
+  }, []);
 
   const filteredRestaurants = isVegOnly 
-    ? mockRestaurants.filter(r => r.isVeg)
-    : mockRestaurants;
+    ? restaurants.filter(r => r.isVeg)
+    : restaurants;
 
   const filteredTrendingItems = isVegOnly
-    ? mockTrendingItems.filter(item => item.isVeg)
-    : mockTrendingItems;
+    ? trendingItems.filter(item => item.isVeg)
+    : trendingItems;
 
   if (isLoading) {
     return (
@@ -349,11 +280,17 @@ export default function Home() {
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-1 mb-3">
-                      {restaurant.cuisine.map((type) => (
-                        <Badge key={type} variant="outline" className="text-xs">
-                          {type}
+                      {Array.isArray(restaurant.cuisine) ? (
+                        restaurant.cuisine.map((type) => (
+                          <Badge key={type} variant="outline" className="text-xs">
+                            {type}
+                          </Badge>
+                        ))
+                      ) : (
+                        <Badge variant="outline" className="text-xs">
+                          {restaurant.cuisine}
                         </Badge>
-                      ))}
+                      )}
                     </div>
                     <Button 
                       variant="outline" 
