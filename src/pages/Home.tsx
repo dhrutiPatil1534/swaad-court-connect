@@ -51,14 +51,16 @@ export default function Home() {
     if (!selectedMenuItem) return;
 
     try {
-      // Add item to cart with restaurant information
-      addItem(
-        selectedMenuItem,
-        selectedMenuItem.restaurantId,
-        selectedMenuItem.restaurantName || 'Unknown Restaurant', // Provide a fallback name
-        [],
-        specialInstructions
-      );
+      // Add items to cart based on quantity
+      for (let i = 0; i < quantity; i++) {
+        addItem(
+          selectedMenuItem,
+          selectedMenuItem.restaurantId,
+          selectedMenuItem.restaurantName || 'Unknown Restaurant', // Provide a fallback name
+          [],
+          specialInstructions
+        );
+      }
       
       toast({
         title: 'Item added to cart',
