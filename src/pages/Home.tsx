@@ -7,8 +7,14 @@ import {
   MapPin,
   TrendingUp,
   Utensils,
-  Award
+  Award,
+  Plus,
+  Minus
 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { toast } from '@/components/ui/use-toast';
+import { useCart } from '@/context/cart-context';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -28,6 +34,49 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [trendingItems, setTrendingItems] = useState<FoodItem[]>([]);
+  const [selectedMenuItem, setSelectedMenuItem] = useState<FoodItem | null>(null);
+  const [quantity, setQuantity] = useState(1);
+  const [isAddToCartOpen, setIsAddToCartOpen] = useState(false);
+  const [specialInstructions, setSpecialInstructions] = useState('');
+  const { addItem } = useCart();
+
+  const handleAddToCart = (item: FoodItem) => {
+    setSelectedMenuItem(item);
+    setQuantity(1);
+    setSpecialInstructions('');
+    setIsAddToCartOpen(true);
+  };
+
+  const handleConfirmAddToCart = () => {
+    if (!selectedMenuItem) return;
+
+    try {
+      // Add item to cart with restaurant information
+      addItem(
+        selectedMenuItem,
+        selectedMenuItem.restaurantId,
+        selectedMenuItem.restaurantName || 'Unknown Restaurant', // Provide a fallback name
+        [],
+        specialInstructions
+      );
+      
+      toast({
+        title: 'Item added to cart',
+        description: `${quantity}x ${selectedMenuItem.name} from ${selectedMenuItem.restaurantName} added to your cart`,
+      });
+
+      setIsAddToCartOpen(false);
+      setSelectedMenuItem(null);
+      setQuantity(1);
+      setSpecialInstructions('');
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to add item to cart',
+        variant: 'destructive',
+      });
+    }
+  };
 
   useEffect(() => {
     async function loadData() {
@@ -209,9 +258,84 @@ export default function Home() {
                         <span className="text-lg font-bold text-primary">₹{item.price}</span>
                         <p className="text-xs text-muted-foreground">{item.restaurantName}</p>
                       </div>
-                      <Button variant="food" size="sm" className="ripple-effect">
+                      <Button 
+                        variant="food" 
+                        size="sm" 
+                        className="ripple-effect"
+                        onClick={() => handleAddToCart(item)}
+                      >
                         Add to Cart
                       </Button>
+
+      {/* Add to Cart Dialog */}
+      <Dialog open={isAddToCartOpen} onOpenChange={setIsAddToCartOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add to Cart</DialogTitle>
+          </DialogHeader>
+
+          {selectedMenuItem && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-4">
+                <div className="relative w-20 h-20 rounded-lg overflow-hidden">
+                  {selectedMenuItem.image && (
+                    <img 
+                      src={selectedMenuItem.image} 
+                      alt={selectedMenuItem.name}
+                      className="w-full h-full object-cover"
+                    />
+                  )}
+                </div>
+                
+                <div>
+                  <h3 className="font-medium">{selectedMenuItem.name}</h3>
+                  <p className="text-sm font-bold text-primary">₹{selectedMenuItem.price}</p>
+                </div>
+              </div>
+
+              {/* Special Instructions */}
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium">Special Instructions</h4>
+                <Textarea
+                  placeholder="Any allergies or special requests?"
+                  value={specialInstructions}
+                  onChange={(e) => setSpecialInstructions(e.target.value)}
+                  className="h-24"
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 bg-muted rounded-lg p-1">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                  >
+                    <Minus className="h-4 w-4" />
+                  </Button>
+                  <span className="w-8 text-center">{quantity}</span>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => setQuantity(quantity + 1)}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+                <p className="font-medium">Total: ₹{selectedMenuItem.price * quantity}</p>
+              </div>
+
+              <Button 
+                variant="food" 
+                className="w-full" 
+                onClick={handleConfirmAddToCart}
+              >
+                Add to Cart • ₹{selectedMenuItem.price * quantity}
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
                     </div>
                   </div>
                 </CardContent>

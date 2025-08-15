@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { fetchRestaurants, fetchRestaurantMenu, Restaurant, MenuItem } from '@/lib/firebase';
 import { useQuery } from '@tanstack/react-query';
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { useCart } from '@/context/cart-context';
 import { toast } from '@/hooks/use-toast';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, ShoppingCart, Star, Clock, MapPin } from 'lucide-react';
+import { Plus, Minus, ShoppingCart, Star, Clock, MapPin, Utensils } from 'lucide-react';
 import { VegNonVegIndicator } from '@/components/ui/veg-non-veg-indicator';
 
 export function RestaurantList() {
@@ -17,6 +19,8 @@ export function RestaurantList() {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [selectedMenuItem, setSelectedMenuItem] = useState<MenuItem | null>(null);
   const [quantity, setQuantity] = useState(1);
+  const [isAddToCartOpen, setIsAddToCartOpen] = useState(false);
+  const [specialInstructions, setSpecialInstructions] = useState('');
   const { addItem, canAddToCart } = useCart();
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -55,12 +59,28 @@ export function RestaurantList() {
       return;
     }
 
+    setSelectedMenuItem(item);
+    setQuantity(1);
+    setIsAddToCartOpen(true);
+  };
+
+  const handleConfirmAddToCart = () => {
+    if (!selectedMenuItem || !selectedRestaurant) return;
+
     try {
-      addItem(item, restaurantId, restaurantName, [], '');
+      for (let i = 0; i < quantity; i++) {
+        addItem(selectedMenuItem, selectedRestaurant, restaurants?.find(r => r.id === selectedRestaurant)?.name || '', [], specialInstructions);
+      }
+      
       toast({
         title: 'Item added to cart',
-        description: `${item.name} added to your cart`,
+        description: `${quantity}x ${selectedMenuItem.name} added to your cart`,
       });
+
+      setIsAddToCartOpen(false);
+      setSelectedMenuItem(null);
+      setQuantity(1);
+      setSpecialInstructions('');
     } catch (error) {
       toast({
         title: 'Error adding item',
@@ -115,7 +135,7 @@ export function RestaurantList() {
                   <CardContent className="p-0 relative">
                     {restaurant.discount && (
                       <Badge className="absolute top-3 left-3 bg-red-500 z-10">
-                        {restaurant.discount}% OFF
+                        {restaurant.discount}
                       </Badge>
                     )}
                     {restaurant.isPopular && (
@@ -138,7 +158,7 @@ export function RestaurantList() {
                             <span>•</span>
                             <span>{restaurant.deliveryTime}</span>
                           </div>
-                          <span>{restaurant.distance}</span>
+                         
                         </div>
                         <div className="flex gap-2 mt-2 flex-wrap">
                           {restaurant.tags?.slice(0, 3).map((tag, index) => (
@@ -232,7 +252,7 @@ export function RestaurantList() {
                                   <h4 className="font-semibold group-hover:text-primary transition-colors">{item.name}</h4>
                                   <p className="text-sm text-muted-foreground line-clamp-2">{item.description}</p>
                                   <div className="mt-1 flex items-center gap-2">
-                                    <span className="font-medium">${item.price.toFixed(2)}</span>
+                                    <span className="font-medium">₹{item.price}</span>
                                     {item.isPopular && (
                                       <Badge variant="secondary" className="text-xs">Popular</Badge>
                                     )}
@@ -248,6 +268,85 @@ export function RestaurantList() {
                                 >
                                   <Plus className="h-4 w-4" />
                                 </Button>
+
+      {/* Add to Cart Dialog */}
+      <Dialog open={isAddToCartOpen} onOpenChange={setIsAddToCartOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add to Cart</DialogTitle>
+          </DialogHeader>
+          
+          {selectedMenuItem && (
+            <div className="space-y-4">
+              <div className="flex gap-4 items-start">
+                <div className="relative w-24 h-24 rounded-lg overflow-hidden">
+                  <img 
+                    src={selectedMenuItem.image} 
+                    alt={selectedMenuItem.name}
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute top-1 left-1">
+                    <VegNonVegIndicator isVeg={selectedMenuItem.isVeg} size="sm" />
+                  </div>
+                </div>
+                
+                <div className="flex-1">
+                  <h3 className="font-medium">{selectedMenuItem.name}</h3>
+                  <p className="text-sm text-muted-foreground line-clamp-2">{selectedMenuItem.description}</p>
+                  <p className="font-medium mt-1">₹{selectedMenuItem.price}</p>
+                </div>
+              </div>
+
+              {/* Special Instructions */}
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium">Special Instructions</h4>
+                <Textarea
+                  placeholder="Any allergies or special requests?"
+                  value={specialInstructions}
+                  onChange={(e) => setSpecialInstructions(e.target.value)}
+                  className="h-24"
+                />
+                {selectedMenuItem?.allergens && (
+                  <div className="text-sm text-muted-foreground">
+                    <span className="font-medium">Contains:</span> {selectedMenuItem.allergens.join(', ')}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 bg-muted rounded-lg p-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0"
+                    onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                    disabled={quantity <= 1}
+                  >
+                    <Minus className="h-4 w-4" />
+                  </Button>
+                  <span className="text-sm font-medium w-6 text-center">{quantity}</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0"
+                    onClick={() => setQuantity(quantity + 1)}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                <Button
+                  className="flex-1 ripple-effect"
+                  onClick={handleConfirmAddToCart}
+                >
+                  <Utensils className="h-4 w-4 mr-2" />
+                  Add to Cart • ₹{selectedMenuItem.price * quantity}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
                               </div>
                             </div>
                           </motion.div>

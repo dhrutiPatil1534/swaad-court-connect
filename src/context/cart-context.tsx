@@ -37,6 +37,7 @@ interface CartContextType {
   getTotalItems: () => number;
   getRestaurantItems: (restaurantId: string) => CartItem[];
   canAddToCart: (restaurantId: string) => { allowed: boolean; message: string };
+  getRestaurantSubtotal: (restaurantId: string) => number;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -65,22 +66,18 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const canAddToCart = (restaurantId: string) => {
     if (items.length === 0) return { allowed: true, message: '' };
-    
-    const currentRestaurantId = items[0].restaurantId;
-    if (currentRestaurantId !== restaurantId) {
-      return {
-        allowed: false,
-        message: 'Cannot add items from different restaurants. Please clear your cart first.'
-      };
-    }
-    
     return { allowed: true, message: '' };
   };
 
-  const addItem = (item: MenuItem, restaurantId: string, restaurantName: string, customizations?: SelectedCustomization[], specialInstructions?: string) => {
-    const cartCheck = canAddToCart(restaurantId);
+  const addItem = (item: MenuItem, restaurantId: string, restaurantName: string, customizations?: SelectedCustomization[], specialInstructions?: string, isDineIn?: boolean) => {
+    const cartCheck = canAddToCart(restaurantId, isDineIn || false);
     if (!cartCheck.allowed) {
       throw new Error(cartCheck.message);
+    }
+    
+    // Update isDineIn state if it's different
+    if (isDineIn !== undefined && isDineIn !== isDineIn) {
+      setIsDineIn(isDineIn);
     }
 
     const itemIdentifier = getItemIdentifier(item, customizations, specialInstructions);
@@ -158,6 +155,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     return items.filter(item => item.restaurantId === restaurantId);
   };
 
+  const getRestaurantSubtotal = (restaurantId: string) => {
+    return items
+      .filter(item => item.restaurantId === restaurantId)
+      .reduce((total, item) => total + item.totalPrice, 0);
+  };
+
   return (
     <CartContext.Provider
       value={{
@@ -169,7 +172,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         getTotalPrice,
         getTotalItems,
         getRestaurantItems,
-        canAddToCart
+        canAddToCart,
+        getRestaurantSubtotal
       }}
     >
       {children}

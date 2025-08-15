@@ -227,7 +227,10 @@ function CartSidebar() {
             <h3 className="text-lg font-medium mb-2">Your cart is empty</h3>
             <p className="text-muted-foreground mb-6">Add items to get started!</p>
             <Button variant="food" asChild>
-              <Link to="/restaurants">Browse Restaurants</Link>
+              <Link to="/restaurants">
+                <Plus className="h-4 w-4 mr-2" />
+                Browse Restaurants
+              </Link>
             </Button>
           </motion.div>
         </div>

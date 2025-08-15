@@ -26,7 +26,8 @@ export default function Cart() {
     removeItem, 
     clearCart, 
     getTotalPrice, 
-    getTotalItems 
+    getTotalItems,
+    getRestaurantSubtotal
   } = useCart();
 
   // Group items by restaurant
@@ -161,6 +162,11 @@ export default function Cart() {
                             <h3 className="font-medium">{item.name}</h3>
                           </div>
                           <p className="text-sm font-bold text-primary">₹{item.price}</p>
+                          {item.specialInstructions && (
+                            <p className="text-sm text-muted-foreground mt-1">
+                              Note: {item.specialInstructions}
+                            </p>
+                          )}
                         </div>
                         
                         <div className="flex items-center gap-3">
@@ -240,7 +246,17 @@ export default function Cart() {
 
                 {/* Price Breakdown */}
                 <div className="space-y-3">
-                  <div className="flex justify-between text-sm">
+                  {/* Restaurant-wise subtotals */}
+                  {Object.entries(itemsByRestaurant).map(([restaurantId, restaurant]) => (
+                    <div key={restaurantId} className="flex justify-between text-sm">
+                      <span>{restaurant.restaurantName}</span>
+                      <span>₹{getRestaurantSubtotal(restaurantId)}</span>
+                    </div>
+                  ))}
+                  
+                  <Separator />
+                  
+                  <div className="flex justify-between text-sm font-medium">
                     <span>Subtotal ({getTotalItems()} items)</span>
                     <span>₹{getTotalPrice()}</span>
                   </div>
