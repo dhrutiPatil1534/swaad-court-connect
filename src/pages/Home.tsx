@@ -22,7 +22,6 @@ import { Badge } from '@/components/ui/badge';
 import { VegNonVegIndicator, VegNonVegToggle } from '@/components/common/VegNonVegToggle';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import heroImage from '@/assets/hero-food-court.jpg';
-import foodCategories from '@/assets/food-categories.jpg';
 import { cn } from '@/lib/utils';
 import { fetchRestaurants, fetchRestaurantMenu, Restaurant, MenuItem } from '@/lib/firebase';
 
@@ -459,39 +458,6 @@ export default function Home() {
                 </CardContent>
               </Card>
             ))}
-          </div>
-        </section>
-
-        {/* Food Categories */}
-        <section>
-          <h2 className="text-2xl font-heading font-bold mb-6 text-center">
-            Explore by Categories
-          </h2>
-          
-          <div className="relative overflow-hidden rounded-2xl">
-            <img 
-              src={foodCategories} 
-              alt="Food Categories" 
-              className="w-full h-64 object-cover"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-transparent to-transparent" />
-            <div className="absolute bottom-6 left-6 right-6">
-              <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
-                {['Burgers', 'Pizza', 'Indian', 'Chinese', 'Desserts', 'Beverages'].map((category, index) => (
-                  <Button
-                    key={category}
-                    variant="secondary"
-                    size="sm"
-                    className="bg-white/20 backdrop-blur-sm border border-white/30 text-white hover:bg-white/30"
-                    asChild
-                  >
-                    <Link to={`/restaurants?category=${category.toLowerCase()}`}>
-                      {category}
-                    </Link>
-                  </Button>
-                ))}
-              </div>
-            </div>
           </div>
         </section>
       </div>
