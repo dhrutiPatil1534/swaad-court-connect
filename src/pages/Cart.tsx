@@ -282,7 +282,7 @@ export default function Cart() {
                 <Button 
                   variant="food" 
                   size="lg" 
-                  className="w-full ripple-effect animate-food-bounce"
+                  className="w-full ripple-effect "
                   asChild
                 >
                   <Link to="/checkout">

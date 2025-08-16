@@ -11,6 +11,7 @@ import {
   Plus,
   Minus
 } from 'lucide-react';
+import { Footer } from '@/components/layout/Footer';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/use-toast';
@@ -209,6 +210,32 @@ export default function Home() {
       </section>
 
       <div className="container mx-auto px-4 py-8 space-y-12">
+        {/* Food Categories */}
+        <section>
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-2">
+              <Utensils className="h-6 w-6 text-secondary animate-food-pulse" />
+              <h2 className="text-2xl font-heading font-bold">Food Categories</h2>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            {['Burgers', 'Pizza', 'Indian', 'Chinese', 'Desserts', 'Beverages'].map((category, index) => (
+              <Button
+                key={category}
+                variant="outline"
+                size="lg"
+                className="h-24 flex flex-col items-center justify-center gap-2 bg-white/5 backdrop-blur-sm border-white/10 hover:bg-white/10 group"
+                asChild
+              >
+                <Link to={`/restaurants?category=${category.toLowerCase()}`}>
+                  <span className="text-lg font-medium group-hover:text-primary transition-colors">{category}</span>
+                </Link>
+              </Button>
+            ))}
+          </div>
+        </section>
+
         {/* Trending Items */}
         <section>
           <div className="flex items-center justify-between mb-6">
@@ -468,6 +495,7 @@ export default function Home() {
           </div>
         </section>
       </div>
+      <Footer />
     </div>
   );
 }

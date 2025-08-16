@@ -280,7 +280,7 @@ function CartSidebar() {
                           </p>
                         )}
                         <div className="mt-1">
-                          <span className="font-medium text-sm">${item.totalPrice.toFixed(2)}</span>
+                          <span className="font-medium text-sm">₹{item.totalPrice.toFixed(2)}</span>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -324,15 +324,15 @@ function CartSidebar() {
         <div className="space-y-2 mb-4">
           <div className="flex justify-between text-sm">
             <span>Subtotal</span>
-            <span>${totalPrice.toFixed(2)}</span>
+            <span>₹{totalPrice.toFixed(2)}</span>
           </div>
           <div className="flex justify-between text-sm">
             <span>Delivery Fee</span>
-            <span>$0.00</span>
+            <span>FREE</span>
           </div>
           <div className="flex justify-between text-sm font-medium">
             <span>Total</span>
-            <span>${totalPrice.toFixed(2)}</span>
+            <span>₹{totalPrice.toFixed(2)}</span>
           </div>
         </div>
         <Button className="w-full" size="lg" asChild>
