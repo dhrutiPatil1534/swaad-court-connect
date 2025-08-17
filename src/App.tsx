@@ -13,6 +13,8 @@ import Restaurants from "./pages/Restaurants";
 import Login from "./pages/Login";
 import Restaurant from "./pages/Restaurant";
 import Cart from "./pages/Cart";
+import Checkout from "./pages/Checkout";
+import OrderSuccess from "./pages/OrderSuccess";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -68,6 +70,22 @@ const App = () => (
                   element={
                     <AppLayout>
                       <Cart />
+                    </AppLayout>
+                  } 
+                />
+                <Route 
+                  path="/checkout" 
+                  element={
+                    <AppLayout>
+                      <Checkout />
+                    </AppLayout>
+                  } 
+                />
+                <Route 
+                  path="/order-success" 
+                  element={
+                    <AppLayout>
+                      <OrderSuccess />
                     </AppLayout>
                   } 
                 />
