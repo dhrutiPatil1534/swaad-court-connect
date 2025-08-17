@@ -69,7 +69,9 @@ export function RestaurantList() {
 
     try {
       for (let i = 0; i < quantity; i++) {
-        addItem(selectedMenuItem, selectedRestaurant, restaurants?.find(r => r.id === selectedRestaurant)?.name || '', [], specialInstructions);
+        const restaurant = restaurants?.find(r => r.id === selectedRestaurant);
+      if (!restaurant) return;
+      addItem(selectedMenuItem, selectedRestaurant, restaurant.name, [], specialInstructions);
       }
       
       toast({
