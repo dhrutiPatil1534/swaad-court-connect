@@ -1,158 +1,262 @@
-import React from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { useAuth } from '@/context/auth-context';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  Clock, 
+  MapPin, 
+  Receipt, 
+  ChefHat,
+  CheckCircle,
+  XCircle,
+  Utensils,
+  Calendar
+} from 'lucide-react';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { format } from 'date-fns';
+import { useAuth } from '@/context/auth-context';
+import { 
+  getUserOrders, 
+  getOngoingOrders, 
+  getPastOrders, 
+  getOrderStatusColor,
+  Order,
+  OrderItem 
+} from '@/lib/firebase';
+import { formatDistanceToNow } from 'date-fns';
 
-interface Order {
-  id: string;
-  userId: string;
-  items: Array<{
-    id: string;
-    name: string;
-    quantity: number;
-    price: number;
-    restaurantName: string;
-  }>;
-  status: 'pending' | 'processing' | 'completed' | 'cancelled';
-  totalAmount: number;
-  paymentId: string;
-  createdAt: Date;
-}
+const EmptyState = ({ type }: { type: 'ongoing' | 'past' }) => (
+  <motion.div
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    className="flex flex-col items-center justify-center py-16 px-4"
+  >
+    <div className="w-32 h-32 mb-6 rounded-full bg-gradient-to-br from-orange-100 to-red-100 dark:from-orange-900 dark:to-red-900 flex items-center justify-center">
+      {type === 'ongoing' ? (
+        <ChefHat className="w-16 h-16 text-orange-500" />
+      ) : (
+        <Receipt className="w-16 h-16 text-gray-500" />
+      )}
+    </div>
+    <h3 className="text-xl font-semibold mb-2">
+      {type === 'ongoing' ? 'No ongoing orders' : 'No past orders'}
+    </h3>
+    <p className="text-muted-foreground text-center max-w-sm">
+      {type === 'ongoing' 
+        ? 'When you place an order, it will appear here with real-time updates.'
+        : 'Your completed and cancelled orders will be shown here.'
+      }
+    </p>
+  </motion.div>
+);
 
-export default function Orders() {
-  const { user } = useAuth();
+const OrderItemsList = ({ items }: { items: OrderItem[] }) => (
+  <div className="space-y-2">
+    {items.map((item, index) => (
+      <div key={index} className="flex justify-between items-center text-sm">
+        <div className="flex items-center gap-2">
+          <span className="w-6 h-6 bg-orange-100 dark:bg-orange-900 text-orange-600 dark:text-orange-400 rounded-full flex items-center justify-center text-xs font-medium">
+            {item.quantity}
+          </span>
+          <div className="flex justify-between items-center text-sm">
+            <span className="font-medium">{item.name}</span>
+          </div>
+        </div>
+        <span className="text-muted-foreground">₹{item.unitPrice * item.quantity}</span>
+      </div>
+    ))}
+  </div>
+);
 
-  const { data: orders, isLoading } = useQuery({
-    queryKey: ['orders', user?.uid],
-    queryFn: async () => {
-      if (!user) return [];
-      
-      const ordersRef = collection(db, 'orders');
-      const q = query(ordersRef, where('userId', '==', user.uid));
-      const querySnapshot = await getDocs(q);
-      
-      return querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt.toDate()
-      })) as Order[];
-    },
-    enabled: !!user
-  });
-
-  const getStatusColor = (status: Order['status']) => {
+const OrderCard = ({ order }: { order: Order }) => {
+  const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'pending':
-        return 'bg-yellow-500';
-      case 'processing':
-        return 'bg-blue-500';
-      case 'completed':
-        return 'bg-green-500';
-      case 'cancelled':
-        return 'bg-red-500';
+      case 'Placed':
+        return <Clock className="w-4 h-4" />;
+      case 'Confirmed':
+        return <CheckCircle className="w-4 h-4" />;
+      case 'Preparing':
+        return <ChefHat className="w-4 h-4" />;
+      case 'Ready to Serve':
+        return <Utensils className="w-4 h-4" />;
+      case 'Served':
+        return <CheckCircle className="w-4 h-4" />;
+      case 'Completed':
+        return <CheckCircle className="w-4 h-4" />;
+      case 'Cancelled':
+        return <XCircle className="w-4 h-4" />;
       default:
-        return 'bg-gray-500';
+        return <Clock className="w-4 h-4" />;
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="max-w-4xl mx-auto">
-          <h1 className="text-3xl font-bold mb-6">Orders</h1>
-          <p>Loading orders...</p>
-        </div>
-      </div>
-    );
-  }
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      whileHover={{ y: -2 }}
+      transition={{ duration: 0.2 }}
+    >
+      <Card className="hover:shadow-lg transition-shadow duration-200">
+        <CardHeader className="pb-3">
+          <div className="flex justify-between items-start">
+            <div className="flex-1">
+              <h3 className="font-semibold text-lg">{order.restaurantName}</h3>
+              <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
+                <div className="flex items-center gap-1">
+                  <Calendar className="w-4 h-4" />
+                  {formatDistanceToNow(order.createdAt, { addSuffix: true })}
+                </div>
+                {order.tableNumber && (
+                  <div className="flex items-center gap-1">
+                    <MapPin className="w-4 h-4" />
+                    Table {order.tableNumber}
+                  </div>
+                )}
+              </div>
+            </div>
+            <Badge 
+              className={`${getOrderStatusColor(order.status)} flex items-center gap-1`}
+              variant="secondary"
+            >
+              {getStatusIcon(order.status)}
+              {order.status}
+            </Badge>
+          </div>
+        </CardHeader>
+        
+        <CardContent>
+          <OrderItemsList items={order.items} />
+          
+          <Separator className="my-4" />
+          
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-muted-foreground">
+              {order.items.length} item{order.items.length !== 1 ? 's' : ''}
+            </span>
+            <span className="font-semibold text-lg">₹{order.totalAmount}</span>
+          </div>
+          
+          {order.notes && (
+            <div className="mt-3 p-3 bg-muted rounded-lg">
+              <p className="text-sm text-muted-foreground">
+                <strong>Note:</strong> {order.notes}
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+};
 
-  if (!orders?.length) {
+export default function Orders() {
+  const { user } = useAuth();
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('ongoing');
+
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    const unsubscribe = getUserOrders(user.uid, (fetchedOrders) => {
+      setOrders(fetchedOrders);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [user?.uid]);
+
+  const ongoingOrders = getOngoingOrders(orders);
+  const pastOrders = getPastOrders(orders);
+
+  if (loading) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <div className="max-w-4xl mx-auto">
-          <h1 className="text-3xl font-bold mb-6">Orders</h1>
-          <Card>
-            <CardContent className="py-8 text-center">
-              <p className="text-muted-foreground">No orders found</p>
-            </CardContent>
-          </Card>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+            className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full"
+          />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold mb-6">Orders</h1>
-        
-        <div className="space-y-4">
-          {orders.map((order) => (
-            <Card key={order.id}>
-              <CardHeader>
-                <div className="flex justify-between items-start">
-                  <div>
-                    <CardTitle className="text-lg">
-                      Order #{order.id.slice(-6)}
-                    </CardTitle>
-                    <p className="text-sm text-muted-foreground">
-                      {format(order.createdAt, 'PPP')}
-                    </p>
-                  </div>
-                  <Badge 
-                    variant="secondary"
-                    className={`${getStatusColor(order.status)} text-white`}
-                  >
-                    {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-                  </Badge>
-                </div>
-              </CardHeader>
+    <div className="container mx-auto px-4 py-8 max-w-4xl">
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mb-8"
+      >
+        <h1 className="text-3xl font-bold mb-2">My Orders</h1>
+        <p className="text-muted-foreground">Track your dine-in orders in real-time</p>
+      </motion.div>
 
-              <CardContent>
-                <div className="space-y-4">
-                  {/* Order Items */}
-                  <div className="space-y-2">
-                    {order.items.map((item, index) => (
-                      <div key={index} className="flex justify-between items-start">
-                        <div>
-                          <p className="font-medium">{item.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {item.restaurantName}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-medium">₹{item.price}</p>
-                          <p className="text-sm text-muted-foreground">
-                            Qty: {item.quantity}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid w-full grid-cols-2 mb-8">
+          <TabsTrigger value="ongoing" className="flex items-center gap-2">
+            <ChefHat className="w-4 h-4" />
+            Ongoing Orders
+            {ongoingOrders.length > 0 && (
+              <Badge variant="secondary" className="ml-1">
+                {ongoingOrders.length}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="past" className="flex items-center gap-2">
+            <Receipt className="w-4 h-4" />
+            Past Orders
+            {pastOrders.length > 0 && (
+              <Badge variant="secondary" className="ml-1">
+                {pastOrders.length}
+              </Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
 
-                  <Separator />
+        <TabsContent value="ongoing">
+          <AnimatePresence mode="wait">
+            {ongoingOrders.length === 0 ? (
+              <EmptyState type="ongoing" />
+            ) : (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="space-y-4"
+              >
+                {ongoingOrders.map((order) => (
+                  <OrderCard key={order.id} order={order} />
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </TabsContent>
 
-                  {/* Order Total */}
-                  <div className="flex justify-between items-center">
-                    <span className="font-medium">Total Amount</span>
-                    <span className="font-medium">₹{order.totalAmount}</span>
-                  </div>
-
-                  {/* Payment Info */}
-                  <div className="text-sm text-muted-foreground">
-                    Payment ID: {order.paymentId}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
+        <TabsContent value="past">
+          <AnimatePresence mode="wait">
+            {pastOrders.length === 0 ? (
+              <EmptyState type="past" />
+            ) : (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="space-y-4"
+              >
+                {pastOrders.map((order) => (
+                  <OrderCard key={order.id} order={order} />
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

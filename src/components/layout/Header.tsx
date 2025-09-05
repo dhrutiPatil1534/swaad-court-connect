@@ -105,7 +105,7 @@ export function Header({ onMenuClick, showMenuButton = false }: HeaderProps) {
               variant="ghost"
               size="icon-sm"
               onClick={toggleTheme}
-              className="animate-food-pulse"
+              className="food-pulse"
             >
               {theme === 'light' ? (
                 <Moon className="h-4 w-4" />

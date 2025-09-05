@@ -44,6 +44,7 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
+  const [isDineIn, setIsDineIn] = useState(false);
 
   const getItemCustomizationPrice = (customizations?: SelectedCustomization[]) => {
     if (!customizations) return 0;
@@ -69,15 +70,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     return { allowed: true, message: '' };
   };
 
-  const addItem = (item: MenuItem, restaurantId: string, restaurantName: string, customizations?: SelectedCustomization[], specialInstructions?: string, isDineIn?: boolean) => {
-    const cartCheck = canAddToCart(restaurantId, isDineIn || false);
+  const addItem = (item: MenuItem, restaurantId: string, restaurantName: string, customizations?: SelectedCustomization[], specialInstructions?: string) => {
+    const cartCheck = canAddToCart(restaurantId);
     if (!cartCheck.allowed) {
       throw new Error(cartCheck.message);
-    }
-    
-    // Update isDineIn state if it's different
-    if (isDineIn !== undefined && isDineIn !== isDineIn) {
-      setIsDineIn(isDineIn);
     }
 
     const itemIdentifier = getItemIdentifier(item, customizations, specialInstructions);

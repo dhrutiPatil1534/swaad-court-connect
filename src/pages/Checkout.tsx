@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { useCart } from '@/context/cart-context';
+import { useAuth } from '@/context/auth-context';
+import { createOrder } from '@/lib/firebase';
 import { ArrowLeft } from 'lucide-react';
 
 declare global {
@@ -15,6 +17,7 @@ declare global {
 export default function Checkout() {
   const navigate = useNavigate();
   const { getTotalPrice, items, clearCart } = useCart();
+  const { user } = useAuth();
   
   const totalAmount = getTotalPrice();
   const taxes = (totalAmount * 0.05).toFixed(2); // 5% tax
@@ -27,18 +30,71 @@ export default function Checkout() {
       currency: 'INR',
       name: 'Swaad Court',
       description: 'Food Order Payment',
-      handler: function (response: any) {
+      handler: async function (response: any) {
         // Handle successful payment
         if (response.razorpay_payment_id) {
-          // Clear cart and redirect to success page
-          clearCart();
-          navigate('/order-success', { 
-            state: { 
-              paymentId: response.razorpay_payment_id,
-              orderId: response.razorpay_order_id,
-              amount: finalAmount
-            }
-          });
+          try {
+            // Create order in Firestore
+            const orderData = {
+              userId: user?.uid || '',
+              restaurantId: items[0]?.restaurantId || 'swaad_court_main',
+              restaurantName: items[0]?.restaurantName || 'Swaad Court',
+              restaurantImage: items[0]?.restaurantImage || '',
+              items: items.map(item => ({
+                id: item.id,
+                name: item.name,
+                quantity: item.quantity,
+                unitPrice: item.price,
+                totalPrice: item.totalPrice,
+                image: item.image,
+                category: item.category || 'Food'
+              })),
+              pricing: {
+                subtotal: totalAmount,
+                taxes: parseFloat(taxes),
+                deliveryFee: 0,
+                discount: 0,
+                totalAmount: parseFloat(finalAmount)
+              },
+              payment: {
+                method: 'Razorpay',
+                status: 'Completed',
+                transactionId: response.razorpay_payment_id,
+                paidAt: new Date().toISOString()
+              },
+              dineIn: {
+                tableNumber: '12', // Default table number
+                seatingArea: 'Main Hall',
+                guestCount: 1
+              },
+              notes: '',
+              source: 'mobile_app'
+            };
+
+            const orderId = await createOrder(orderData);
+            console.log('Order created successfully:', orderId);
+
+            // Clear cart and redirect to success page
+            clearCart();
+            navigate('/order-success', { 
+              state: { 
+                paymentId: response.razorpay_payment_id,
+                orderId: orderId,
+                amount: finalAmount
+              }
+            });
+          } catch (error) {
+            console.error('Error creating order:', error);
+            // Still redirect to success page even if order creation fails
+            clearCart();
+            navigate('/order-success', { 
+              state: { 
+                paymentId: response.razorpay_payment_id,
+                orderId: response.razorpay_order_id,
+                amount: finalAmount
+              }
+            });
+          }
         }
       },
       prefill: {

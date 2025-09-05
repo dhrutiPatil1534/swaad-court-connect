@@ -15,6 +15,8 @@ import Restaurant from "./pages/Restaurant";
 import Cart from "./pages/Cart";
 import Checkout from "./pages/Checkout";
 import OrderSuccess from "./pages/OrderSuccess";
+import Orders from "./pages/Orders";
+import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -93,9 +95,7 @@ const App = () => (
                   path="/orders" 
                   element={
                     <AppLayout>
-                      <div className="container mx-auto px-4 py-8">
-                        <h1 className="text-3xl font-bold">Orders - Coming Soon</h1>
-                      </div>
+                      <Orders />
                     </AppLayout>
                   } 
                 />
@@ -103,9 +103,7 @@ const App = () => (
                   path="/profile" 
                   element={
                     <AppLayout>
-                      <div className="container mx-auto px-4 py-8">
-                        <h1 className="text-3xl font-bold">Profile - Coming Soon</h1>
-                      </div>
+                      <Profile />
                     </AppLayout>
                   } 
                 />
