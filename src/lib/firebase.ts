@@ -1941,3 +1941,569 @@ export async function getVendorStats(vendorId: string) {
     throw error;
   }
 }
+
+// Admin Dashboard Functions
+export async function getAdminDashboardStats() {
+  try {
+    const [vendorsSnapshot, usersSnapshot, ordersSnapshot] = await Promise.all([
+      getDocs(query(collection(db, 'users'), where('role', '==', 'vendor'))),
+      getDocs(query(collection(db, 'users'), where('role', '==', 'customer'))),
+      getDocs(collection(db, 'orders'))
+    ]);
+
+    // Calculate vendor stats
+    const vendors = vendorsSnapshot.docs.map(doc => doc.data());
+    const totalVendors = vendors.length;
+    const pendingApprovals = vendors.filter(v => v.status === 'pending').length;
+
+    // Calculate customer stats
+    const totalCustomers = usersSnapshot.size;
+
+    // Calculate order stats
+    const orders = ordersSnapshot.docs.map(doc => doc.data());
+    const totalOrders = orders.length;
+    const activeOrders = orders.filter(o => 
+      ['pending', 'accepted', 'preparing', 'ready'].includes(o.status)
+    ).length;
+
+    // Calculate revenue stats
+    const completedOrders = orders.filter(o => o.status === 'completed');
+    const totalRevenue = completedOrders.reduce((sum, order) => sum + (order.totalAmount || 0), 0);
+    const platformCommission = totalRevenue * 0.1; // 10% commission
+
+    // Calculate monthly growth (mock calculation - you can implement proper date filtering)
+    const thisMonth = new Date().getMonth();
+    const thisMonthOrders = orders.filter(o => {
+      const orderDate = o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt);
+      return orderDate.getMonth() === thisMonth;
+    });
+    const lastMonthOrders = orders.filter(o => {
+      const orderDate = o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt);
+      return orderDate.getMonth() === thisMonth - 1;
+    });
+    const monthlyGrowth = lastMonthOrders.length > 0 
+      ? ((thisMonthOrders.length - lastMonthOrders.length) / lastMonthOrders.length) * 100 
+      : 0;
+
+    return {
+      totalVendors,
+      pendingApprovals,
+      totalCustomers,
+      totalOrders,
+      totalRevenue,
+      activeOrders,
+      monthlyGrowth: Math.round(monthlyGrowth * 10) / 10,
+      platformCommission
+    };
+  } catch (error) {
+    console.error('Error fetching admin dashboard stats:', error);
+    throw error;
+  }
+}
+
+export async function getRecentActivity(limit = 5) {
+  try {
+    // Get recent vendor registrations
+    const recentVendorsQuery = query(
+      collection(db, 'users'),
+      where('role', '==', 'vendor'),
+      orderBy('createdAt', 'desc'),
+      limitToLast(3)
+    );
+
+    // Get recent orders
+    const recentOrdersQuery = query(
+      collection(db, 'orders'),
+      orderBy('createdAt', 'desc'),
+      limitToLast(3)
+    );
+
+    // Get recent admin notifications
+    const recentNotificationsQuery = query(
+      collection(db, 'adminNotifications'),
+      orderBy('createdAt', 'desc'),
+      limitToLast(2)
+    );
+
+    const [vendorsSnapshot, ordersSnapshot, notificationsSnapshot] = await Promise.all([
+      getDocs(recentVendorsQuery),
+      getDocs(recentOrdersQuery),
+      getDocs(recentNotificationsQuery)
+    ]);
+
+    const activities = [];
+
+    // Add vendor activities
+    vendorsSnapshot.docs.forEach(doc => {
+      const vendor = doc.data();
+      activities.push({
+        id: doc.id,
+        type: 'vendor',
+        title: 'New vendor registered',
+        description: `${vendor.businessName || vendor.name} - ${getTimeAgo(vendor.createdAt)}`,
+        timestamp: vendor.createdAt,
+        status: vendor.status === 'pending' ? 'pending' : 'approved'
+      });
+    });
+
+    // Add order activities
+    ordersSnapshot.docs.forEach(doc => {
+      const order = doc.data();
+      const isLargeOrder = order.totalAmount > 1000;
+      activities.push({
+        id: doc.id,
+        type: 'order',
+        title: isLargeOrder ? 'Large order placed' : 'New order placed',
+        description: `₹${order.totalAmount} order ${order.customerName ? `from ${order.customerName}` : ''}`,
+        timestamp: order.createdAt,
+        status: order.status
+      });
+    });
+
+    // Add notification activities
+    notificationsSnapshot.docs.forEach(doc => {
+      const notification = doc.data();
+      activities.push({
+        id: doc.id,
+        type: 'notification',
+        title: notification.title,
+        description: notification.message,
+        timestamp: notification.createdAt,
+        status: 'info'
+      });
+    });
+
+    // Sort by timestamp and limit
+    return activities
+      .sort((a, b) => {
+        const aTime = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(a.timestamp);
+        const bTime = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(b.timestamp);
+        return bTime.getTime() - aTime.getTime();
+      })
+      .slice(0, limit);
+
+  } catch (error) {
+    console.error('Error fetching recent activity:', error);
+    throw error;
+  }
+}
+
+function getTimeAgo(timestamp: any): string {
+  const date = timestamp?.toDate ? timestamp.toDate() : new Date(timestamp);
+  const now = new Date();
+  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+  if (diffInSeconds < 60) return `${diffInSeconds} seconds ago`;
+  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`;
+  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
+  return `${Math.floor(diffInSeconds / 86400)} days ago`;
+}
+
+// Create admin notification function
+export async function createAdminNotification(title: string, message: string, type: 'info' | 'warning' | 'error' | 'success' = 'info') {
+  try {
+    await addDoc(collection(db, 'adminNotifications'), {
+      title,
+      message,
+      type,
+      read: false,
+      createdAt: Timestamp.now()
+    });
+  } catch (error) {
+    console.error('Error creating admin notification:', error);
+    throw error;
+  }
+}
+
+// Create login credentials for existing restaurants
+export async function createLoginCredentialsForRestaurants() {
+  try {
+    // Fetch all existing restaurants
+    const restaurantsSnapshot = await getDocs(collection(db, 'restaurants'));
+    const restaurants = restaurantsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+    console.log(`Found ${restaurants.length} restaurants in Firebase`);
+
+    const createdCredentials = [];
+    const errors = [];
+
+    for (const restaurant of restaurants) {
+      try {
+        // Generate email and password for restaurant owner
+        const restaurantName = restaurant.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const email = `${restaurantName}@swaadcourt.com`;
+        const password = `${restaurant.name.replace(/\s+/g, '')}@123`;
+
+        // Create Firebase Auth user
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+
+        // Create vendor profile in users collection
+        const vendorProfile = {
+          uid: user.uid,
+          email: email,
+          name: restaurant.ownerName || `${restaurant.name} Owner`,
+          businessName: restaurant.name,
+          phone: restaurant.phone || '+919876543210',
+          role: 'vendor',
+          status: 'active',
+          restaurantId: restaurant.id, // Link to existing restaurant
+          cuisine: restaurant.cuisine || ['General'],
+          description: restaurant.description || `Welcome to ${restaurant.name}`,
+          address: restaurant.address || 'Swaad Court Food Complex',
+          rating: restaurant.rating || 4.0,
+          deliveryTime: restaurant.deliveryTime || '20-30 mins',
+          isOpen: restaurant.isOpen !== undefined ? restaurant.isOpen : true,
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+          // Additional vendor fields
+          totalOrders: restaurant.totalOrders || 0,
+          totalRevenue: restaurant.totalRevenue || 0,
+          averageRating: restaurant.rating || 4.0,
+          reviewsCount: restaurant.reviewsCount || 0,
+          profileImage: restaurant.image || '',
+          bannerImage: restaurant.bannerImage || '',
+          operatingHours: restaurant.operatingHours || {
+            monday: { open: '09:00', close: '22:00', isOpen: true },
+            tuesday: { open: '09:00', close: '22:00', isOpen: true },
+            wednesday: { open: '09:00', close: '22:00', isOpen: true },
+            thursday: { open: '09:00', close: '22:00', isOpen: true },
+            friday: { open: '09:00', close: '22:00', isOpen: true },
+            saturday: { open: '09:00', close: '23:00', isOpen: true },
+            sunday: { open: '10:00', close: '22:00', isOpen: true }
+          }
+        };
+
+        // Save vendor profile to users collection
+        await setDoc(doc(db, 'users', user.uid), vendorProfile);
+
+        // Update restaurant document with vendor UID for linking
+        await updateDoc(doc(db, 'restaurants', restaurant.id), {
+          vendorUid: user.uid,
+          vendorEmail: email,
+          updatedAt: Timestamp.now()
+        });
+
+        createdCredentials.push({
+          restaurantName: restaurant.name,
+          restaurantId: restaurant.id,
+          ownerName: restaurant.ownerName || `${restaurant.name} Owner`,
+          email: email,
+          password: password,
+          uid: user.uid,
+          cuisine: restaurant.cuisine || ['General']
+        });
+
+        console.log(`✅ Created login for: ${restaurant.name}`);
+
+      } catch (error: any) {
+        console.error(`❌ Error creating login for ${restaurant.name}:`, error);
+        
+        // Handle existing email case
+        if (error.code === 'auth/email-already-in-use') {
+          errors.push({
+            restaurantName: restaurant.name,
+            email: `${restaurant.name.toLowerCase().replace(/[^a-z0-9]/g, '')}@swaadcourt.com`,
+            error: 'Email already exists - account may already be created'
+          });
+        } else {
+          errors.push({
+            restaurantName: restaurant.name,
+            email: `${restaurant.name.toLowerCase().replace(/[^a-z0-9]/g, '')}@swaadcourt.com`,
+            error: error.message
+          });
+        }
+      }
+    }
+
+    return { createdCredentials, errors, totalRestaurants: restaurants.length };
+
+  } catch (error) {
+    console.error('Error creating login credentials for restaurants:', error);
+    throw error;
+  }
+}
+
+// Function to get all restaurant login credentials (for display)
+export async function getRestaurantLoginCredentials() {
+  try {
+    // Get all vendor users
+    const vendorsQuery = query(
+      collection(db, 'users'),
+      where('role', '==', 'vendor'),
+      where('restaurantId', '!=', null)
+    );
+    
+    const vendorsSnapshot = await getDocs(vendorsQuery);
+    const credentials = [];
+
+    for (const doc of vendorsSnapshot.docs) {
+      const vendor = doc.data();
+      
+      // Get restaurant details
+      if (vendor.restaurantId) {
+        const restaurantDoc = await getDoc(doc(db, 'restaurants', vendor.restaurantId));
+        const restaurant = restaurantDoc.exists() ? restaurantDoc.data() : {};
+        
+        credentials.push({
+          restaurantName: vendor.businessName,
+          ownerName: vendor.name,
+          email: vendor.email,
+          cuisine: vendor.cuisine?.join(', ') || 'General',
+          rating: restaurant.rating || vendor.rating || 4.0,
+          status: vendor.status,
+          restaurantId: vendor.restaurantId
+        });
+      }
+    }
+
+    return credentials;
+  } catch (error) {
+    console.error('Error fetching restaurant credentials:', error);
+    throw error;
+  }
+}
+
+// Admin Vendor Management Functions
+export async function getAllVendorsForAdmin() {
+  try {
+    // Get all vendor users from users collection
+    const vendorsQuery = query(
+      collection(db, 'users'),
+      where('role', '==', 'vendor')
+    );
+    
+    const vendorsSnapshot = await getDocs(vendorsQuery);
+    const vendors = [];
+
+    for (const doc of vendorsSnapshot.docs) {
+      const vendorData = doc.data();
+      
+      // Get restaurant data if linked
+      let restaurantData = {};
+      if (vendorData.restaurantId) {
+        const restaurantDoc = await getDoc(doc(db, 'restaurants', vendorData.restaurantId));
+        if (restaurantDoc.exists()) {
+          restaurantData = restaurantDoc.data();
+        }
+      }
+
+      // Get vendor stats (orders, revenue, etc.)
+      const vendorStats = await getVendorStatsById(doc.id);
+
+      vendors.push({
+        id: doc.id,
+        businessName: vendorData.businessName || vendorData.name,
+        email: vendorData.email,
+        phone: vendorData.phone,
+        address: vendorData.address || restaurantData.address,
+        cuisine: vendorData.cuisine || restaurantData.cuisine || ['General'],
+        logo: vendorData.profileImage || restaurantData.image,
+        status: vendorData.status || 'pending',
+        commissionRate: vendorData.commissionRate || 10,
+        createdAt: vendorData.createdAt?.toDate ? vendorData.createdAt.toDate() : new Date(vendorData.createdAt),
+        approvedAt: vendorData.approvedAt?.toDate ? vendorData.approvedAt.toDate() : null,
+        rejectedAt: vendorData.rejectedAt?.toDate ? vendorData.rejectedAt.toDate() : null,
+        suspendedAt: vendorData.suspendedAt?.toDate ? vendorData.suspendedAt.toDate() : null,
+        stats: {
+          totalOrders: vendorStats.totalOrders || 0,
+          totalRevenue: vendorStats.totalRevenue || 0,
+          averageRating: vendorData.averageRating || restaurantData.rating || 0,
+          completionRate: vendorStats.completionRate || 0
+        },
+        documents: vendorData.documents || {},
+        rejectionReason: vendorData.rejectionReason,
+        suspensionReason: vendorData.suspensionReason,
+        restaurantId: vendorData.restaurantId,
+        isOpen: vendorData.isOpen !== undefined ? vendorData.isOpen : true,
+        deliveryTime: vendorData.deliveryTime || restaurantData.deliveryTime || '20-30 mins',
+        description: vendorData.description || restaurantData.description
+      });
+    }
+
+    return vendors.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  } catch (error) {
+    console.error('Error fetching all vendors for admin:', error);
+    throw error;
+  }
+}
+
+// Get vendor statistics by vendor ID
+export async function getVendorStatsById(vendorId: string) {
+  try {
+    // Get orders for this vendor
+    const ordersQuery = query(
+      collection(db, 'orders'),
+      where('vendorId', '==', vendorId)
+    );
+    
+    const ordersSnapshot = await getDocs(ordersQuery);
+    const orders = ordersSnapshot.docs.map(doc => doc.data());
+
+    const totalOrders = orders.length;
+    const completedOrders = orders.filter(order => order.status === 'completed');
+    const totalRevenue = completedOrders.reduce((sum, order) => sum + (order.totalAmount || 0), 0);
+    
+    // Calculate completion rate
+    const deliveredOrders = orders.filter(order => 
+      ['completed', 'delivered'].includes(order.status)
+    );
+    const completionRate = totalOrders > 0 ? Math.round((deliveredOrders.length / totalOrders) * 100) : 0;
+
+    return {
+      totalOrders,
+      totalRevenue,
+      completionRate
+    };
+  } catch (error) {
+    console.error('Error fetching vendor stats:', error);
+    return {
+      totalOrders: 0,
+      totalRevenue: 0,
+      completionRate: 0
+    };
+  }
+}
+
+// Update existing approveVendor function to work with users collection
+export async function approveVendorById(vendorId: string, commissionRate: number = 10) {
+  try {
+    await updateDoc(doc(db, 'users', vendorId), {
+      status: 'active',
+      commissionRate: commissionRate,
+      approvedAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+      // Clear any rejection data
+      rejectionReason: null,
+      rejectedAt: null
+    });
+
+    // Create notification for vendor
+    await addDoc(collection(db, 'notifications'), {
+      userId: vendorId,
+      title: 'Application Approved!',
+      message: `Congratulations! Your vendor application has been approved. You can now start receiving orders with a ${commissionRate}% commission rate.`,
+      type: 'success',
+      read: false,
+      createdAt: Timestamp.now()
+    });
+
+    // Create admin notification
+    await createAdminNotification(
+      'Vendor Approved',
+      `Vendor application approved with ${commissionRate}% commission rate`,
+      'success'
+    );
+
+    return true;
+  } catch (error) {
+    console.error('Error approving vendor:', error);
+    throw error;
+  }
+}
+
+// Update existing rejectVendor function
+export async function rejectVendorById(vendorId: string, reason: string) {
+  try {
+    await updateDoc(doc(db, 'users', vendorId), {
+      status: 'rejected',
+      rejectionReason: reason,
+      rejectedAt: Timestamp.now(),
+      updatedAt: Timestamp.now()
+    });
+
+    // Create notification for vendor
+    await addDoc(collection(db, 'notifications'), {
+      userId: vendorId,
+      title: 'Application Rejected',
+      message: `Your vendor application has been rejected. Reason: ${reason}`,
+      type: 'error',
+      read: false,
+      createdAt: Timestamp.now()
+    });
+
+    // Create admin notification
+    await createAdminNotification(
+      'Vendor Rejected',
+      `Vendor application rejected: ${reason}`,
+      'warning'
+    );
+
+    return true;
+  } catch (error) {
+    console.error('Error rejecting vendor:', error);
+    throw error;
+  }
+}
+
+// Update existing suspendVendor function
+export async function suspendVendorById(vendorId: string, reason: string, duration?: number) {
+  try {
+    const suspendUntil = duration ? new Date(Date.now() + duration * 24 * 60 * 60 * 1000) : null;
+    
+    await updateDoc(doc(db, 'users', vendorId), {
+      status: 'suspended',
+      suspensionReason: reason,
+      suspendedAt: Timestamp.now(),
+      suspendUntil: suspendUntil ? Timestamp.fromDate(suspendUntil) : null,
+      updatedAt: Timestamp.now()
+    });
+    
+    // Create notification for vendor
+    await addDoc(collection(db, 'notifications'), {
+      userId: vendorId,
+      title: 'Account Suspended',
+      message: `Your vendor account has been suspended. Reason: ${reason}${duration ? ` Duration: ${duration} days` : ''}`,
+      type: 'warning',
+      read: false,
+      createdAt: Timestamp.now()
+    });
+
+    // Create admin notification
+    await createAdminNotification(
+      'Vendor Suspended',
+      `Vendor suspended: ${reason}`,
+      'warning'
+    );
+
+    return true;
+  } catch (error) {
+    console.error('Error suspending vendor:', error);
+    throw error;
+  }
+}
+
+// Update existing activateVendor function
+export async function activateVendorById(vendorId: string) {
+  try {
+    await updateDoc(doc(db, 'users', vendorId), {
+      status: 'active',
+      suspensionReason: null,
+      suspendedAt: null,
+      suspendUntil: null,
+      updatedAt: Timestamp.now()
+    });
+    
+    // Create notification for vendor
+    await addDoc(collection(db, 'notifications'), {
+      userId: vendorId,
+      title: 'Account Activated',
+      message: 'Your vendor account has been activated. You can now start receiving orders!',
+      type: 'success',
+      read: false,
+      createdAt: Timestamp.now()
+    });
+
+    // Create admin notification
+    await createAdminNotification(
+      'Vendor Activated',
+      'Vendor account has been reactivated',
+      'success'
+    );
+
+    return true;
+  } catch (error) {
+    console.error('Error activating vendor:', error);
+    throw error;
+  }
+}

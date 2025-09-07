@@ -37,13 +37,11 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import {
-  getAllVendors,
-  approveVendor,
-  rejectVendor,
-  suspendVendor,
-  activateVendor,
-  updateVendorCommission,
-  getVendorStats
+  getAllVendorsForAdmin,
+  approveVendorById,
+  rejectVendorById,
+  suspendVendorById,
+  activateVendorById
 } from '@/lib/firebase';
 
 interface Vendor {
@@ -101,91 +99,8 @@ export default function VendorManagement() {
   const loadVendors = async () => {
     setIsLoading(true);
     try {
-      // Mock data - replace with actual Firebase query
-      const mockVendors: Vendor[] = [
-        {
-          id: '1',
-          businessName: 'Pizza Palace',
-          email: 'owner@pizzapalace.com',
-          phone: '+91 9876543210',
-          address: '123 Food Street, Mumbai',
-          cuisine: ['Italian', 'Continental'],
-          logo: '/api/placeholder/100/100',
-          status: 'pending',
-          commissionRate: 10,
-          createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
-          stats: {
-            totalOrders: 0,
-            totalRevenue: 0,
-            averageRating: 0,
-            completionRate: 0
-          },
-          documents: {
-            businessLicense: 'doc1.pdf',
-            foodLicense: 'doc2.pdf',
-            gstCertificate: 'doc3.pdf'
-          }
-        },
-        {
-          id: '2',
-          businessName: 'Spice Garden',
-          email: 'contact@spicegarden.com',
-          phone: '+91 9876543211',
-          address: '456 Curry Lane, Delhi',
-          cuisine: ['Indian', 'North Indian'],
-          logo: '/api/placeholder/100/100',
-          status: 'approved',
-          commissionRate: 12,
-          createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
-          approvedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000),
-          stats: {
-            totalOrders: 245,
-            totalRevenue: 125000,
-            averageRating: 4.5,
-            completionRate: 92
-          }
-        },
-        {
-          id: '3',
-          businessName: 'Burger Hub',
-          email: 'info@burgerhub.com',
-          phone: '+91 9876543212',
-          address: '789 Fast Food Ave, Bangalore',
-          cuisine: ['American', 'Fast Food'],
-          status: 'suspended',
-          commissionRate: 8,
-          createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-          suspendedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
-          suspensionReason: 'Multiple customer complaints about food quality',
-          stats: {
-            totalOrders: 89,
-            totalRevenue: 45000,
-            averageRating: 2.8,
-            completionRate: 65
-          }
-        },
-        {
-          id: '4',
-          businessName: 'Healthy Bites',
-          email: 'hello@healthybites.com',
-          phone: '+91 9876543213',
-          address: '321 Green Street, Pune',
-          cuisine: ['Healthy', 'Salads'],
-          status: 'rejected',
-          commissionRate: 0,
-          createdAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000),
-          rejectedAt: new Date(Date.now() - 12 * 24 * 60 * 60 * 1000),
-          rejectionReason: 'Incomplete documentation and invalid food license',
-          stats: {
-            totalOrders: 0,
-            totalRevenue: 0,
-            averageRating: 0,
-            completionRate: 0
-          }
-        }
-      ];
-      
-      setVendors(mockVendors);
+      const vendorsData = await getAllVendorsForAdmin();
+      setVendors(vendorsData);
     } catch (error) {
       console.error('Error loading vendors:', error);
       toast.error('Failed to load vendors');
@@ -212,10 +127,10 @@ export default function VendorManagement() {
     setFilteredVendors(filtered);
   };
 
-  const handleApproveVendor = async (vendorId: string) => {
+  const handleApprove = async (vendorId: string) => {
     setActionLoading(vendorId);
     try {
-      await approveVendor(vendorId, commissionRate);
+      await approveVendorById(vendorId, commissionRate);
       setVendors(prev => prev.map(vendor =>
         vendor.id === vendorId
           ? { ...vendor, status: 'approved' as const, approvedAt: new Date(), commissionRate }
@@ -231,7 +146,7 @@ export default function VendorManagement() {
     }
   };
 
-  const handleRejectVendor = async (vendorId: string) => {
+  const handleReject = async (vendorId: string) => {
     if (!rejectionReason.trim()) {
       toast.error('Please provide a rejection reason');
       return;
@@ -239,7 +154,7 @@ export default function VendorManagement() {
 
     setActionLoading(vendorId);
     try {
-      await rejectVendor(vendorId, rejectionReason);
+      await rejectVendorById(vendorId, rejectionReason);
       setVendors(prev => prev.map(vendor =>
         vendor.id === vendorId
           ? { ...vendor, status: 'rejected' as const, rejectedAt: new Date(), rejectionReason }
@@ -256,7 +171,7 @@ export default function VendorManagement() {
     }
   };
 
-  const handleSuspendVendor = async (vendorId: string) => {
+  const handleSuspend = async (vendorId: string) => {
     if (!suspensionReason.trim()) {
       toast.error('Please provide a suspension reason');
       return;
@@ -264,7 +179,7 @@ export default function VendorManagement() {
 
     setActionLoading(vendorId);
     try {
-      await suspendVendor(vendorId, suspensionReason);
+      await suspendVendorById(vendorId, suspensionReason);
       setVendors(prev => prev.map(vendor =>
         vendor.id === vendorId
           ? { ...vendor, status: 'suspended' as const, suspendedAt: new Date(), suspensionReason }
@@ -281,10 +196,10 @@ export default function VendorManagement() {
     }
   };
 
-  const handleActivateVendor = async (vendorId: string) => {
+  const handleActivate = async (vendorId: string) => {
     setActionLoading(vendorId);
     try {
-      await activateVendor(vendorId);
+      await activateVendorById(vendorId);
       setVendors(prev => prev.map(vendor =>
         vendor.id === vendorId
           ? { ...vendor, status: 'approved' as const, suspendedAt: undefined, suspensionReason: undefined }
@@ -592,7 +507,7 @@ export default function VendorManagement() {
                                 </div>
                                 <div className="flex gap-3">
                                   <Button
-                                    onClick={() => handleApproveVendor(vendor.id)}
+                                    onClick={() => handleApprove(vendor.id)}
                                     disabled={actionLoading === vendor.id}
                                     className="flex-1"
                                   >
@@ -640,7 +555,7 @@ export default function VendorManagement() {
                                 <div className="flex gap-3">
                                   <Button
                                     variant="destructive"
-                                    onClick={() => handleRejectVendor(vendor.id)}
+                                    onClick={() => handleReject(vendor.id)}
                                     disabled={actionLoading === vendor.id || !rejectionReason.trim()}
                                     className="flex-1"
                                   >
@@ -691,7 +606,7 @@ export default function VendorManagement() {
                               <div className="flex gap-3">
                                 <Button
                                   variant="destructive"
-                                  onClick={() => handleSuspendVendor(vendor.id)}
+                                  onClick={() => handleSuspend(vendor.id)}
                                   disabled={actionLoading === vendor.id || !suspensionReason.trim()}
                                   className="flex-1"
                                 >
@@ -712,7 +627,7 @@ export default function VendorManagement() {
 
                       {vendor.status === 'suspended' && (
                         <Button
-                          onClick={() => handleActivateVendor(vendor.id)}
+                          onClick={() => handleActivate(vendor.id)}
                           className="gap-2 bg-green-600 hover:bg-green-700"
                           disabled={actionLoading === vendor.id}
                         >

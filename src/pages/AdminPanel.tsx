@@ -36,6 +36,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/auth-context';
+import { getAdminDashboardStats, getRecentActivity } from '@/lib/firebase';
 import VendorManagement from '@/components/admin/VendorManagement';
 import RestaurantMonitoring from '@/components/admin/RestaurantMonitoring';
 import OrdersManagement from '@/components/admin/OrdersManagement';
@@ -80,17 +81,8 @@ export default function AdminPanel() {
   const loadDashboardStats = async () => {
     setDashboardLoading(true);
     try {
-      // Mock data - replace with actual Firebase queries
-      setDashboardStats({
-        totalVendors: 45,
-        pendingApprovals: 8,
-        totalCustomers: 1250,
-        totalOrders: 3420,
-        totalRevenue: 485000,
-        activeOrders: 23,
-        monthlyGrowth: 12.5,
-        platformCommission: 48500
-      });
+      const stats = await getAdminDashboardStats();
+      setDashboardStats(stats);
     } catch (error) {
       console.error('Error loading dashboard stats:', error);
       toast.error('Failed to load dashboard statistics');
