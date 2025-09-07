@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, 
   Plus, 
@@ -9,7 +9,9 @@ import {
   CreditCard,
   MapPin,
   Clock,
-  Utensils
+  Utensils,
+  User,
+  LogIn
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,9 +19,12 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { VegNonVegIndicator } from '@/components/common/VegNonVegToggle';
 import { useCart } from '@/context/cart-context';
+import { useAuth } from '@/context/auth-context';
 import { cn } from '@/lib/utils';
 
 export default function Cart() {
+  const navigate = useNavigate();
+  const { user, isAuthenticated } = useAuth();
   const { 
     items, 
     updateQuantity, 
@@ -45,6 +50,20 @@ export default function Cart() {
   const deliveryFee = 0; // Free delivery within mall
   const taxes = Math.round(getTotalPrice() * 0.05); // 5% tax
   const totalAmount = getTotalPrice() + deliveryFee + taxes;
+
+  const handleProceedToCheckout = () => {
+    if (!isAuthenticated) {
+      // Redirect to login with return URL
+      navigate('/login', { 
+        state: { 
+          from: '/checkout',
+          message: 'Please log in to complete your order and track your purchases'
+        }
+      });
+      return;
+    }
+    navigate('/checkout');
+  };
 
   if (items.length === 0) {
     return (
@@ -224,6 +243,46 @@ export default function Cart() {
               </CardHeader>
               
               <CardContent className="space-y-4">
+                {/* Authentication Status */}
+                {!isAuthenticated && (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <User className="h-4 w-4 text-amber-600" />
+                      <p className="text-sm font-medium text-amber-800">Login Required</p>
+                    </div>
+                    <p className="text-xs text-amber-700 mb-3">
+                      Please log in to complete your order and track your purchases
+                    </p>
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      className="w-full border-amber-300 text-amber-700 hover:bg-amber-100"
+                      onClick={() => navigate('/login', { 
+                        state: { 
+                          from: '/checkout',
+                          message: 'Please log in to complete your order and track your purchases'
+                        }
+                      })}
+                    >
+                      <LogIn className="h-4 w-4 mr-2" />
+                      Login to Continue
+                    </Button>
+                  </div>
+                )}
+
+                {/* User Info (when authenticated) */}
+                {isAuthenticated && user && (
+                  <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <User className="h-4 w-4 text-green-600" />
+                      <div className="text-sm">
+                        <p className="font-medium text-green-800">Logged in as</p>
+                        <p className="text-green-700">{user.name || user.email}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Location */}
                 <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
                   <MapPin className="h-4 w-4 text-muted-foreground" />
@@ -282,12 +341,20 @@ export default function Cart() {
                 <Button 
                   variant="food" 
                   size="lg" 
-                  className="w-full ripple-effect "
-                  asChild
+                  className={cn(
+                    "w-full ripple-effect",
+                    !isAuthenticated && "opacity-75"
+                  )}
+                  onClick={handleProceedToCheckout}
                 >
-                  <Link to="/checkout">
-                    Proceed to Payment
-                  </Link>
+                  {isAuthenticated ? (
+                    "Proceed to Payment"
+                  ) : (
+                    <>
+                      <LogIn className="h-4 w-4 mr-2" />
+                      Login to Pay
+                    </>
+                  )}
                 </Button>
 
                 <p className="text-xs text-muted-foreground text-center">

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { 
   Mail, 
   Phone, 
@@ -38,6 +38,14 @@ type LoginStep = 'phone-input' | 'otp-verification';
 type AuthMode = 'login' | 'signup';
 
 export default function Login() {
+  const { signInWithEmail, signUpWithEmail, sendOTP, verifyOTP, createUserProfile, getUserProfile, checkAdminCredentials } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  
+  // Get redirect info from location state
+  const from = location.state?.from || '/';
+  const redirectMessage = location.state?.message;
+
   const [activeTab, setActiveTab] = useState<UserRole>('customer');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -57,7 +65,28 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   
-  const navigate = useNavigate();
+  // Redirect after successful login
+  const handleSuccessfulLogin = (user: any) => {
+    console.log('Login successful, user role:', user?.role);
+    
+    // Show success message
+    toast.success('Login successful!');
+    
+    // Show redirect message if provided
+    if (redirectMessage) {
+      toast.info(redirectMessage);
+    }
+    
+    // Role-based redirection with fallback to 'from' parameter
+    if (user?.role === 'admin') {
+      navigate('/admin-panel');
+    } else if (user?.role === 'vendor') {
+      navigate('/vendor-dashboard');
+    } else {
+      // For customers, redirect to the intended page or home
+      navigate(from);
+    }
+  };
 
   // OTP Countdown Timer
   useEffect(() => {
@@ -159,8 +188,7 @@ export default function Login() {
         userProfile = await getUserProfile(user.uid);
       }
 
-      toast.success('Login successful!');
-      navigate('/');
+      handleSuccessfulLogin(user);
     } catch (error: any) {
       console.error('Error verifying OTP:', error);
       toast.error('Invalid OTP. Please try again.');
@@ -222,7 +250,7 @@ export default function Login() {
         }
       }
 
-      navigate('/');
+      handleSuccessfulLogin(user);
     } catch (error: any) {
       console.error('Authentication error:', error);
       
@@ -291,20 +319,7 @@ export default function Login() {
         return;
       }
 
-      toast.success(authMode === 'login' ? 'Login successful!' : 'Account created successfully!');
-      
-      // Role-based redirection
-      switch (activeTab) {
-        case 'customer':
-          navigate('/');
-          break;
-        case 'vendor':
-          navigate('/vendor-dashboard');
-          break;
-        case 'admin':
-          navigate('/admin-panel');
-          break;
-      }
+      handleSuccessfulLogin(user);
     } catch (error: any) {
       console.error('Authentication error:', error);
       

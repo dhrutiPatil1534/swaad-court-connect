@@ -1,5 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { onAuthStateChanged, signOut, User } from 'firebase/auth';
+import { 
+  onAuthStateChanged, 
+  signOut, 
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signInWithPhoneNumber,
+  RecaptchaVerifier,
+  ConfirmationResult,
+  User 
+} from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 
@@ -23,6 +32,13 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   logout: () => Promise<void>;
+  signInWithEmail: (email: string, password: string) => Promise<User>;
+  signUpWithEmail: (email: string, password: string) => Promise<User>;
+  sendOTP: (phoneNumber: string, recaptchaVerifier: RecaptchaVerifier) => Promise<ConfirmationResult>;
+  verifyOTP: (confirmationResult: ConfirmationResult, otp: string) => Promise<User>;
+  createUserProfile: (firebaseUser: User, data: Omit<UserData, 'uid'>) => Promise<UserData>;
+  getUserProfile: (uid: string) => Promise<UserData | null>;
+  checkAdminCredentials: (email: string) => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -74,6 +90,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error('AuthContext: Error creating user profile:', error);
       throw error;
+    }
+  };
+
+  // Email/Password Authentication
+  const signInWithEmail = async (email: string, password: string): Promise<User> => {
+    try {
+      const result = await signInWithEmailAndPassword(auth, email, password);
+      return result.user;
+    } catch (error) {
+      console.error('Error signing in with email:', error);
+      throw error;
+    }
+  };
+
+  const signUpWithEmail = async (email: string, password: string): Promise<User> => {
+    try {
+      const result = await createUserWithEmailAndPassword(auth, email, password);
+      return result.user;
+    } catch (error) {
+      console.error('Error signing up with email:', error);
+      throw error;
+    }
+  };
+
+  // Phone Authentication
+  const sendOTP = async (phoneNumber: string, recaptchaVerifier: RecaptchaVerifier): Promise<ConfirmationResult> => {
+    try {
+      const confirmationResult = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier);
+      return confirmationResult;
+    } catch (error) {
+      console.error('Error sending OTP:', error);
+      throw error;
+    }
+  };
+
+  const verifyOTP = async (confirmationResult: ConfirmationResult, otp: string): Promise<User> => {
+    try {
+      const result = await confirmationResult.confirm(otp);
+      return result.user;
+    } catch (error) {
+      console.error('Error verifying OTP:', error);
+      throw error;
+    }
+  };
+
+  // Admin check
+  const checkAdminCredentials = async (email: string): Promise<boolean> => {
+    try {
+      const adminDoc = await getDoc(doc(db, 'admins', email));
+      return adminDoc.exists();
+    } catch (error) {
+      console.error('Error checking admin credentials:', error);
+      return false;
     }
   };
 
@@ -150,6 +219,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isAuthenticated: !!user,
     isLoading,
     logout,
+    signInWithEmail,
+    signUpWithEmail,
+    sendOTP,
+    verifyOTP,
+    createUserProfile,
+    getUserProfile,
+    checkAdminCredentials,
   };
 
   console.log('AuthContext: Providing context:', { 

@@ -6,7 +6,8 @@ import { Separator } from '@/components/ui/separator';
 import { useCart } from '@/context/cart-context';
 import { useAuth } from '@/context/auth-context';
 import { createOrder } from '@/lib/firebase';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, User, Shield } from 'lucide-react';
+import { toast } from 'sonner';
 
 declare global {
   interface Window {
@@ -17,13 +18,39 @@ declare global {
 export default function Checkout() {
   const navigate = useNavigate();
   const { getTotalPrice, items, clearCart } = useCart();
-  const { user } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
   
   const totalAmount = getTotalPrice();
   const taxes = (totalAmount * 0.05).toFixed(2); // 5% tax
   const finalAmount = (parseFloat(totalAmount.toString()) + parseFloat(taxes)).toFixed(2);
 
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      toast.error('Please log in to complete your order');
+      navigate('/login', { 
+        state: { 
+          from: '/checkout',
+          message: 'Please log in to complete your order and track your purchases'
+        }
+      });
+    }
+  }, [isAuthenticated, isLoading, navigate]);
+
+  // Redirect to cart if no items
+  useEffect(() => {
+    if (items.length === 0) {
+      navigate('/cart');
+    }
+  }, [items.length, navigate]);
+
   const initializeRazorpay = async () => {
+    if (!user) {
+      toast.error('Please log in to complete payment');
+      navigate('/login');
+      return;
+    }
+
     const options = {
       key: 'rzp_test_R6PClkhg7vdR36',
       amount: Math.round(parseFloat(finalAmount) * 100), // Razorpay expects amount in paise
@@ -34,9 +61,11 @@ export default function Checkout() {
         // Handle successful payment
         if (response.razorpay_payment_id) {
           try {
-            // Create order in Firestore
+            // Create order in Firestore with user information
             const orderData = {
-              userId: user?.uid || '',
+              userId: user.uid,
+              userEmail: user.email || '',
+              userName: user.name || 'Customer',
               restaurantId: items[0]?.restaurantId || 'swaad_court_main',
               restaurantName: items[0]?.restaurantName || 'Swaad Court',
               restaurantImage: items[0]?.restaurantImage || '',
@@ -74,6 +103,8 @@ export default function Checkout() {
             const orderId = await createOrder(orderData);
             console.log('Order created successfully:', orderId);
 
+            toast.success('Order placed successfully!');
+
             // Clear cart and redirect to success page
             clearCart();
             navigate('/order-success', { 
@@ -85,6 +116,7 @@ export default function Checkout() {
             });
           } catch (error) {
             console.error('Error creating order:', error);
+            toast.error('Order creation failed, but payment was successful');
             // Still redirect to success page even if order creation fails
             clearCart();
             navigate('/order-success', { 
@@ -98,9 +130,9 @@ export default function Checkout() {
         }
       },
       prefill: {
-        name: '',
-        email: '',
-        contact: ''
+        name: user?.name || '',
+        email: user?.email || '',
+        contact: user?.phone || ''
       },
       theme: {
         color: '#f97316'
@@ -123,6 +155,27 @@ export default function Checkout() {
     };
   }, []);
 
+  // Show loading state while checking authentication
+  if (isLoading) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="max-w-4xl mx-auto">
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+              <p className="text-muted-foreground">Loading...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render if not authenticated (will redirect)
+  if (!isAuthenticated || !user) {
+    return null;
+  }
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="max-w-4xl mx-auto">
@@ -134,6 +187,23 @@ export default function Checkout() {
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back
         </Button>
+
+        {/* User Authentication Confirmation */}
+        <Card className="mb-6 border-green-200 bg-green-50">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+                <Shield className="h-5 w-5 text-green-600" />
+              </div>
+              <div>
+                <p className="font-medium text-green-800">Secure Checkout</p>
+                <p className="text-sm text-green-600">
+                  Logged in as {user.name || user.email} • Your order will be tracked in your profile
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         <div className="grid gap-6 md:grid-cols-2">
           {/* Order Summary */}
@@ -183,6 +253,19 @@ export default function Checkout() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
+                {/* Customer Info */}
+                <div className="p-3 bg-muted rounded-lg">
+                  <div className="flex items-center gap-2 mb-2">
+                    <User className="h-4 w-4 text-muted-foreground" />
+                    <p className="text-sm font-medium">Customer Details</p>
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    <p>{user.name || 'Customer'}</p>
+                    <p>{user.email}</p>
+                    {user.phone && <p>{user.phone}</p>}
+                  </div>
+                </div>
+
                 <Button 
                   className="w-full" 
                   size="lg"
@@ -191,7 +274,8 @@ export default function Checkout() {
                   Pay ₹{finalAmount}
                 </Button>
                 <p className="text-xs text-muted-foreground text-center">
-                  By proceeding with the payment, you agree to our terms and conditions
+                  By proceeding with the payment, you agree to our terms and conditions.
+                  Your order will be saved to your profile for tracking.
                 </p>
               </div>
             </CardContent>
