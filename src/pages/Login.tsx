@@ -29,6 +29,9 @@ import {
   createUserProfile,
   getUserProfile,
   checkAdminCredentials,
+  createAdminAccount,
+  loginAsAdmin,
+  getAdminProfile,
   UserRole 
 } from '@/lib/firebase';
 import { toast } from 'sonner';
@@ -291,49 +294,106 @@ export default function Login() {
       let user;
       
       if (authMode === 'login') {
-        // For admin, check if email exists in admin collection
+        // For admin, use special admin login
         if (activeTab === 'admin') {
-          const isAdmin = await checkAdminCredentials(email);
-          if (!isAdmin) {
-            toast.error('Access denied. Admin credentials required.');
-            setIsLoading(false);
+          try {
+            // Try to login as admin
+            user = await loginAsAdmin(email, password);
+            // Admin profile is already attached, don't create in users collection
+            handleSuccessfulLogin(user);
             return;
+          } catch (adminError: any) {
+            // If admin login fails and it's the default admin credentials, try to create admin account
+            if (email === 'admin@swaadcourtconnect.com' && password === 'Admin@123456') {
+              try {
+                console.log('Creating admin account...');
+                await createAdminAccount();
+                toast.success('Admin account created! Please try logging in again.');
+                setIsLoading(false);
+                return;
+              } catch (createError: any) {
+                if (createError.code === 'auth/email-already-in-use') {
+                  toast.error('Admin account exists but authentication failed. Please check your credentials.');
+                } else {
+                  toast.error('Failed to create admin account: ' + createError.message);
+                }
+                setIsLoading(false);
+                return;
+              }
+            } else {
+              toast.error('Access denied. Admin credentials required.');
+              setIsLoading(false);
+              return;
+            }
           }
         }
         
+        // Regular vendor/customer login
         user = await signInWithEmail(email, password);
+        
+        // Get user profile to determine role
+        const userProfile = await getUserProfile(user.uid);
+        if (userProfile) {
+          user.role = userProfile.role;
+          
+          // Check if vendor needs approval
+          if (userProfile.role === 'vendor' && userProfile.status === 'pending') {
+            toast.warning('Your vendor account is pending admin approval. Please wait for approval before accessing the dashboard.');
+            setIsLoading(false);
+            return;
+          }
+        } else {
+          // Create profile for existing auth user (only for non-admin users)
+          await createUserProfile(user, {
+            role: activeTab,
+            name: user.displayName || name || 'User',
+            email: user.email || email
+          });
+          user.role = activeTab;
+        }
       } else {
+        // Signup flow
+        if (activeTab === 'admin') {
+          toast.error('Admin accounts cannot be created through signup. Please contact system administrator.');
+          setIsLoading(false);
+          return;
+        }
+        
         user = await signUpWithEmail(email, password);
         await createUserProfile(user, {
           role: activeTab,
           name: name,
-          email: email
+          email: email,
+          ...(activeTab === 'vendor' && { 
+            businessName: name,
+            status: 'pending' // Vendors need admin approval
+          })
         });
-      }
-
-      // Get user profile to check approval status for vendors
-      const userProfile = await getUserProfile(user.uid);
-      
-      if (activeTab === 'vendor' && !userProfile?.isApproved) {
-        toast.warning('Your vendor account is pending approval. Please contact admin.');
-        return;
+        user.role = activeTab;
+        
+        if (activeTab === 'vendor') {
+          toast.success('Vendor account created! Your application is pending admin approval.');
+        } else {
+          toast.success('Account created successfully!');
+        }
       }
 
       handleSuccessfulLogin(user);
     } catch (error: any) {
       console.error('Authentication error:', error);
       
-      // Handle specific error messages
       if (error.code === 'auth/user-not-found') {
-        toast.error('No account found with this email');
+        toast.error('No account found with this email. Please sign up first.');
       } else if (error.code === 'auth/wrong-password') {
-        toast.error('Incorrect password');
-      } else if (error.code === 'auth/email-already-in-use') {
-        toast.error('An account with this email already exists');
+        toast.error('Incorrect password. Please try again.');
+      } else if (error.code === 'auth/invalid-email') {
+        toast.error('Please enter a valid email address.');
       } else if (error.code === 'auth/weak-password') {
-        toast.error('Password should be at least 6 characters');
+        toast.error('Password should be at least 6 characters long.');
+      } else if (error.code === 'auth/too-many-requests') {
+        toast.error('Too many failed attempts. Please try again later.');
       } else {
-        toast.error(error.message || 'Authentication failed');
+        toast.error(error.message || 'Authentication failed. Please try again.');
       }
     } finally {
       setIsLoading(false);

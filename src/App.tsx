@@ -17,6 +17,8 @@ import Checkout from "./pages/Checkout";
 import OrderSuccess from "./pages/OrderSuccess";
 import Orders from "./pages/Orders";
 import Profile from "./pages/Profile";
+import AdminPanel from "./pages/AdminPanel";
+import VendorDashboard from "./pages/VendorDashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -51,6 +53,13 @@ const App = () => (
                 />
                 <Route path="/login" element={<Login />} />
                 <Route path="/signup" element={<Login />} />
+                
+                {/* Admin Panel Route */}
+                <Route path="/admin-panel" element={<AdminPanel />} />
+                
+                {/* Vendor Dashboard Route */}
+                <Route path="/vendor-dashboard" element={<VendorDashboard />} />
+                
                 <Route 
                   path="/restaurants" 
                   element={
