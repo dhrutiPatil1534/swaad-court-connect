@@ -143,8 +143,8 @@ export default function AdminPanel() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600">Total Vendors</p>
-                  <p className="text-3xl font-bold text-gray-900">{dashboardStats.totalVendors}</p>
+                  <p className="text-sm text-white-600">Total Vendors</p>
+                  <p className="text-3xl font-bold text-white-900">{dashboardStats.totalVendors}</p>
                   <div className="flex items-center gap-2 mt-2">
                     <Badge variant="secondary" className="text-xs">
                       {dashboardStats.pendingApprovals} pending
@@ -168,8 +168,8 @@ export default function AdminPanel() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600">Total Customers</p>
-                  <p className="text-3xl font-bold text-gray-900">{dashboardStats.totalCustomers.toLocaleString()}</p>
+                  <p className="text-sm text-white-600">Total Customers</p>
+                  <p className="text-3xl font-bold text-white-900">{dashboardStats.totalCustomers.toLocaleString()}</p>
                   <div className="flex items-center gap-2 mt-2">
                     <Badge variant="default" className="text-xs">
                       +{dashboardStats.monthlyGrowth}% this month
@@ -193,8 +193,8 @@ export default function AdminPanel() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600">Total Orders</p>
-                  <p className="text-3xl font-bold text-gray-900">{dashboardStats.totalOrders.toLocaleString()}</p>
+                  <p className="text-sm text-white-600">Total Orders</p>
+                  <p className="text-3xl font-bold text-white-900">{dashboardStats.totalOrders.toLocaleString()}</p>
                   <div className="flex items-center gap-2 mt-2">
                     <Badge variant="secondary" className="text-xs">
                       {dashboardStats.activeOrders} active
@@ -218,8 +218,8 @@ export default function AdminPanel() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600">Platform Revenue</p>
-                  <p className="text-3xl font-bold text-gray-900">₹{dashboardStats.totalRevenue.toLocaleString()}</p>
+                  <p className="text-sm text-white-600">Platform Revenue</p>
+                  <p className="text-3xl font-bold text-white-900">₹{dashboardStats.totalRevenue.toLocaleString()}</p>
                   <div className="flex items-center gap-2 mt-2">
                     <Badge variant="default" className="text-xs">
                       ₹{dashboardStats.platformCommission.toLocaleString()} commission
@@ -248,7 +248,7 @@ export default function AdminPanel() {
             <div className="space-y-4">
               <div className="flex items-center justify-between p-3 bg-orange-50 rounded-lg">
                 <div>
-                  <p className="font-medium">Vendor Applications</p>
+                  <p className="font-medium text-black">Vendor Applications</p>
                   <p className="text-sm text-gray-600">{dashboardStats.pendingApprovals} waiting for approval</p>
                 </div>
                 <Button size="sm" onClick={() => setActiveSection('vendors')}>
@@ -258,7 +258,7 @@ export default function AdminPanel() {
               
               <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
                 <div>
-                  <p className="font-medium">Menu Item Reports</p>
+                  <p className="font-medium text-black">Menu Item Reports</p>
                   <p className="text-sm text-gray-600">3 items flagged for review</p>
                 </div>
                 <Button size="sm" variant="outline" onClick={() => setActiveSection('restaurants')}>
@@ -360,7 +360,7 @@ export default function AdminPanel() {
                   <Shield className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <h2 className="font-bold text-lg">Admin Panel</h2>
+                  <h2 className="font-bold text-lg text-black">Admin Panel</h2>
                   <p className="text-xs text-gray-500">Swaad Court Connect</p>
                 </div>
               </div>
@@ -396,7 +396,7 @@ export default function AdminPanel() {
                   <Users className="w-4 h-4 text-gray-600" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-medium">{user?.name || 'Admin'}</p>
+                  <p className="text-sm font-medium text-black">{user?.name || 'Admin'}</p>
                   <p className="text-xs text-gray-500">Administrator</p>
                 </div>
               </div>
