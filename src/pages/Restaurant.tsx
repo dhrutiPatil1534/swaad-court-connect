@@ -30,7 +30,12 @@ import { useCart } from '@/context/cart-context';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
-import { fetchRestaurantMenu, MenuItem, MenuItemCustomization } from '@/lib/firebase';
+import { 
+  fetchRestaurantMenu, 
+  MenuItem, 
+  MenuItemCustomization, 
+  fetchRestaurant 
+} from '@/lib/firebase';
 import { toast } from '@/hooks/use-toast';
 
 interface SelectedCustomization {
@@ -53,6 +58,16 @@ export default function Restaurant() {
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [quantity, setQuantity] = useState(1);
   const [showNutritionInfo, setShowNutritionInfo] = useState(false);
+  const [isFavorite, setIsFavorite] = useState(false);
+
+  // Fetch restaurant data
+  const { data: restaurantData } = useQuery({
+    queryKey: ['restaurant', id],
+    queryFn: () => fetchRestaurant(id!),
+    enabled: !!id,
+    staleTime: 0,
+    refetchOnMount: true
+  });
 
   // Fetch restaurant menu
   const { data: menuItems, isLoading } = useQuery({
@@ -154,7 +169,7 @@ export default function Restaurant() {
 
     try {
       for (let i = 0; i < quantity; i++) {
-        addItem(selectedItem, id, 'Restaurant Name', selectedCustomizations, specialInstructions);
+        addItem(selectedItem, id, restaurantData?.name || 'Restaurant Name', selectedCustomizations, specialInstructions);
       }
 
       toast({
