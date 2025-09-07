@@ -28,10 +28,6 @@ import {
   clearRecaptchaVerifier,
   createUserProfile,
   getUserProfile,
-  checkAdminCredentials,
-  createAdminAccount,
-  loginAsAdmin,
-  getAdminProfile,
   UserRole 
 } from '@/lib/firebase';
 import { toast } from 'sonner';
@@ -41,7 +37,7 @@ type LoginStep = 'phone-input' | 'otp-verification';
 type AuthMode = 'login' | 'signup';
 
 export default function Login() {
-  const { signInWithEmail, signUpWithEmail, sendOTP, verifyOTP, createUserProfile, getUserProfile, checkAdminCredentials } = useAuth();
+  const { signInWithEmail, signUpWithEmail, sendOTP, verifyOTP, createUserProfile, getUserProfile } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   
@@ -81,7 +77,7 @@ export default function Login() {
     }
     
     // Role-based redirection with fallback to 'from' parameter
-    if (user?.role === 'admin') {
+    if (user?.role === 'admin' || activeTab === 'admin') {
       navigate('/admin-panel');
     } else if (user?.role === 'vendor') {
       navigate('/vendor-dashboard');
@@ -284,64 +280,17 @@ export default function Login() {
       return;
     }
 
-    if (authMode === 'signup' && !name) {
-      toast.error('Please enter your name');
-      return;
-    }
-
     setIsLoading(true);
     try {
       let user;
       
       if (authMode === 'login') {
-        // For admin, use special admin login
-        if (activeTab === 'admin') {
-          try {
-            // Try to login as admin
-            user = await loginAsAdmin(email, password);
-            // Admin profile is already attached, don't create in users collection
-            handleSuccessfulLogin(user);
-            return;
-          } catch (adminError: any) {
-            // If admin login fails and it's the default admin credentials, try to create admin account
-            if (email === 'admin@swaadcourtconnect.com' && password === 'Admin@123456') {
-              try {
-                console.log('Creating admin account...');
-                await createAdminAccount();
-                toast.success('Admin account created! Please try logging in again.');
-                setIsLoading(false);
-                return;
-              } catch (createError: any) {
-                if (createError.code === 'auth/email-already-in-use') {
-                  toast.error('Admin account exists but authentication failed. Please check your credentials.');
-                } else {
-                  toast.error('Failed to create admin account: ' + createError.message);
-                }
-                setIsLoading(false);
-                return;
-              }
-            } else {
-              toast.error('Access denied. Admin credentials required.');
-              setIsLoading(false);
-              return;
-            }
-          }
-        }
-        
-        // Regular vendor/customer login
         user = await signInWithEmail(email, password);
         
         // Get user profile to determine role
         const userProfile = await getUserProfile(user.uid);
         if (userProfile) {
           user.role = userProfile.role;
-          
-          // Check if vendor needs approval
-          if (userProfile.role === 'vendor' && userProfile.status === 'pending') {
-            toast.warning('Your vendor account is pending admin approval. Please wait for approval before accessing the dashboard.');
-            setIsLoading(false);
-            return;
-          }
         } else {
           // Create profile for existing auth user (only for non-admin users)
           await createUserProfile(user, {

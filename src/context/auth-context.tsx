@@ -138,7 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Admin check
   const checkAdminCredentials = async (email: string): Promise<boolean> => {
     try {
-      const adminDoc = await getDoc(doc(db, 'admin', email));
+      const adminDoc = await getDoc(doc(db, 'admins', email));
       return adminDoc.exists();
     } catch (error) {
       console.error('Error checking admin credentials:', error);
@@ -167,7 +167,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (isAdmin) {
             // For admin users, get profile from admin collection
             console.log('AuthContext: User is admin, fetching from admin collection');
-            const adminDoc = await getDoc(doc(db, 'admin', firebaseUser.email || ''));
+            const adminDoc = await getDoc(doc(db, 'admins', firebaseUser.email || ''));
             if (adminDoc.exists()) {
               const adminData = adminDoc.data();
               const adminProfile = {
