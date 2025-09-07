@@ -20,6 +20,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { useAuth } from '@/context/auth-context';
+import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 import { 
   sendOTP, 
   verifyOTP, 
@@ -30,8 +32,8 @@ import {
   getUserProfile,
   UserRole 
 } from '@/lib/firebase';
-import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 type LoginStep = 'phone-input' | 'otp-verification';
 type AuthMode = 'login' | 'signup';
@@ -287,18 +289,47 @@ export default function Login() {
       if (authMode === 'login') {
         user = await signInWithEmail(email, password);
         
-        // Get user profile to determine role
-        const userProfile = await getUserProfile(user.uid);
-        if (userProfile) {
-          user.role = userProfile.role;
+        // For admin tab, check admin credentials first
+        if (activeTab === 'admin') {
+          const { checkAdminCredentials } = await import('@/lib/firebase');
+          const isAdmin = await checkAdminCredentials(email);
+          
+          if (!isAdmin) {
+            toast.error('Admin account exists but authentication failed. Please check your credentials.');
+            setIsLoading(false);
+            return;
+          }
+          
+          // Get admin profile from users collection
+          const usersRef = collection(db, 'users');
+          const adminQuery = query(usersRef, where('email', '==', email), where('role', '==', 'admin'));
+          const adminSnapshot = await getDocs(adminQuery);
+          
+          if (!adminSnapshot.empty) {
+            const adminDoc = adminSnapshot.docs[0];
+            const adminData = adminDoc.data();
+            user.role = 'admin';
+            user.name = adminData.name || 'Admin';
+            user.adminProfile = adminData;
+          } else {
+            toast.error('Admin profile not found. Please contact system administrator.');
+            setIsLoading(false);
+            return;
+          }
         } else {
-          // Create profile for existing auth user (only for non-admin users)
-          await createUserProfile(user, {
-            role: activeTab,
-            name: user.displayName || name || 'User',
-            email: user.email || email
-          });
-          user.role = activeTab;
+          // For non-admin users, get profile from users collection
+          const userProfile = await getUserProfile(user.uid);
+          if (userProfile) {
+            user.role = userProfile.role;
+          } else {
+            // Create profile for existing auth user (only for non-admin users)
+            await createUserProfile(user, {
+              role: activeTab,
+              name: user.displayName || name || 'User',
+              email: user.email || email
+            });
+            user.role = activeTab;
+          }
         }
       } else {
         // Signup flow

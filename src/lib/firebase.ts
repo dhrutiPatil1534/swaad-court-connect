@@ -458,10 +458,17 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
 };
 
 export async function checkAdminCredentials(email: string): Promise<boolean> {
-  const adminsRef = collection(db, 'admins');
-  const q = query(adminsRef, where('email', '==', email));
-  const querySnapshot = await getDocs(q);
-  return !querySnapshot.empty;
+  try {
+    // Check if admin exists by email in the users collection with role 'admin'
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, where('email', '==', email), where('role', '==', 'admin'));
+    const querySnapshot = await getDocs(q);
+    
+    return !querySnapshot.empty;
+  } catch (error) {
+    console.error('Error checking admin credentials:', error);
+    return false;
+  }
 };
 
 // Admin Authentication Functions
@@ -1299,10 +1306,12 @@ export async function getTopSellingProducts(vendorId: string, limit: number = 5)
     );
     
     const snapshot = await getDocs(q);
+    const orders = snapshot.docs.map(doc => doc.data());
+    
+    // Calculate analytics
     const productSales: { [key: string]: { name: string; totalSold: number; revenue: number; category: string; isVeg: boolean } } = {};
     
-    snapshot.docs.forEach(doc => {
-      const order = doc.data();
+    orders.forEach(order => {
       order.items?.forEach((item: any) => {
         if (!productSales[item.id]) {
           productSales[item.id] = {
@@ -1899,46 +1908,30 @@ export async function getVendorStats(vendorId: string) {
     );
     
     const ordersSnapshot = await getDocs(ordersQuery);
-    const orders = ordersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    
-    // Calculate stats
+    const orders = ordersSnapshot.docs.map(doc => doc.data());
+
     const totalOrders = orders.length;
-    const completedOrders = orders.filter((order: any) => order.status === 'completed').length;
-    const totalRevenue = orders
-      .filter((order: any) => order.status === 'completed')
-      .reduce((sum, order: any) => sum + (order.totalAmount || 0), 0);
+    const completedOrders = orders.filter(order => order.status === 'completed');
+    const totalRevenue = completedOrders.reduce((sum, order) => sum + (order.totalAmount || 0), 0);
     
-    // Get average rating
-    const reviewsQuery = query(
-      collection(db, 'reviews'),
-      where('vendorId', '==', vendorId)
+    // Calculate completion rate
+    const deliveredOrders = orders.filter(order => 
+      ['completed', 'delivered'].includes(order.status)
     );
-    const reviewsSnapshot = await getDocs(reviewsQuery);
-    const reviews = reviewsSnapshot.docs.map(doc => doc.data());
-    const averageRating = reviews.length > 0 
-      ? reviews.reduce((sum: number, review: any) => sum + (review.rating || 0), 0) / reviews.length 
-      : 0;
-    
-    // Get menu items count
-    const menuItemsQuery = query(
-      collection(db, 'menuItems'),
-      where('vendorId', '==', vendorId)
-    );
-    const menuItemsSnapshot = await getDocs(menuItemsQuery);
-    const totalMenuItems = menuItemsSnapshot.size;
-    
+    const completionRate = totalOrders > 0 ? Math.round((deliveredOrders.length / totalOrders) * 100) : 0;
+
     return {
       totalOrders,
-      completedOrders,
       totalRevenue,
-      averageRating: Math.round(averageRating * 10) / 10,
-      totalReviews: reviews.length,
-      totalMenuItems,
-      completionRate: totalOrders > 0 ? Math.round((completedOrders / totalOrders) * 100) : 0
+      completionRate
     };
   } catch (error) {
-    console.error('Error getting vendor stats:', error);
-    throw error;
+    console.error('Error fetching vendor stats:', error);
+    return {
+      totalOrders: 0,
+      totalRevenue: 0,
+      completionRate: 0
+    };
   }
 }
 
@@ -2280,11 +2273,12 @@ export async function getAllVendorsForAdmin() {
       const vendorData = doc.data();
       
       // Get restaurant data if linked
-      let restaurantData = {};
+      let restaurantName = 'Unknown Restaurant';
       if (vendorData.restaurantId) {
         const restaurantDoc = await getDoc(doc(db, 'restaurants', vendorData.restaurantId));
         if (restaurantDoc.exists()) {
-          restaurantData = restaurantDoc.data();
+          const restaurantData = restaurantDoc.data();
+          restaurantName = restaurantData.name || restaurantData.businessName || 'Unknown Restaurant';
         }
       }
 
@@ -2504,6 +2498,416 @@ export async function activateVendorById(vendorId: string) {
     return true;
   } catch (error) {
     console.error('Error activating vendor:', error);
+    throw error;
+  }
+}
+
+// Restaurant Monitoring Functions
+export async function getAllRestaurantsForAdmin() {
+  try {
+    // Get all restaurants from restaurants collection
+    const restaurantsSnapshot = await getDocs(collection(db, 'restaurants'));
+    const restaurants = [];
+
+    for (const doc of restaurantsSnapshot.docs) {
+      const restaurantData = doc.data();
+      
+      // Get menu items count for this restaurant
+      const menuItemsQuery = query(
+        collection(db, 'menuItems'),
+        where('restaurantId', '==', doc.id)
+      );
+      const menuItemsSnapshot = await getDocs(menuItemsQuery);
+      const menuItems = menuItemsSnapshot.docs.map(doc => doc.data());
+      
+      // Get flagged items count
+      const flaggedItemsCount = menuItems.filter(item => 
+        item.status === 'flagged' || (item.reportCount && item.reportCount > 0)
+      ).length;
+      
+      // Calculate average price
+      const availableItems = menuItems.filter(item => item.isAvailable !== false);
+      const averagePrice = availableItems.length > 0 
+        ? Math.round(availableItems.reduce((sum, item) => sum + (item.price || 0), 0) / availableItems.length)
+        : 0;
+
+      restaurants.push({
+        id: doc.id,
+        name: restaurantData.name || restaurantData.businessName,
+        cuisine: restaurantData.cuisine || [],
+        logo: restaurantData.image || restaurantData.logo,
+        menuItemsCount: menuItems.length,
+        flaggedItemsCount,
+        averagePrice,
+        status: restaurantData.status || 'active',
+        address: restaurantData.address,
+        phone: restaurantData.phone,
+        email: restaurantData.email,
+        rating: restaurantData.rating || 0,
+        deliveryTime: restaurantData.deliveryTime || '20-30 mins',
+        isOpen: restaurantData.isOpen !== undefined ? restaurantData.isOpen : true
+      });
+    }
+
+    return restaurants.sort((a, b) => b.menuItemsCount - a.menuItemsCount);
+  } catch (error) {
+    console.error('Error fetching restaurants for admin:', error);
+    throw error;
+  }
+}
+
+export async function getAllMenuItemsForAdmin() {
+  try {
+    const menuItemsSnapshot = await getDocs(collection(db, 'menuItems'));
+    const menuItems = [];
+
+    for (const doc of menuItemsSnapshot.docs) {
+      const itemData = doc.data();
+      
+      // Get restaurant name
+      let restaurantName = 'Unknown Restaurant';
+      if (itemData.restaurantId) {
+        const restaurantDoc = await getDoc(doc(db, 'restaurants', itemData.restaurantId));
+        if (restaurantDoc.exists()) {
+          const restaurantData = restaurantDoc.data();
+          restaurantName = restaurantData.name || restaurantData.businessName || 'Unknown Restaurant';
+        }
+      }
+
+      // Get reports for this item
+      const reportsQuery = query(
+        collection(db, 'menuItemReports'),
+        where('menuItemId', '==', doc.id)
+      );
+      const reportsSnapshot = await getDocs(reportsQuery);
+      const reports = reportsSnapshot.docs.map(reportDoc => ({
+        id: reportDoc.id,
+        ...reportDoc.data(),
+        reportedAt: reportDoc.data().reportedAt?.toDate ? reportDoc.data().reportedAt.toDate() : new Date(reportDoc.data().reportedAt)
+      }));
+
+      menuItems.push({
+        id: doc.id,
+        name: itemData.name,
+        description: itemData.description || '',
+        price: itemData.price || 0,
+        category: itemData.category || 'General',
+        image: itemData.image,
+        isVeg: itemData.isVeg !== undefined ? itemData.isVeg : true,
+        isAvailable: itemData.isAvailable !== undefined ? itemData.isAvailable : true,
+        restaurantId: itemData.restaurantId,
+        restaurantName,
+        createdAt: itemData.createdAt?.toDate ? itemData.createdAt.toDate() : new Date(itemData.createdAt || Date.now()),
+        updatedAt: itemData.updatedAt?.toDate ? itemData.updatedAt.toDate() : new Date(itemData.updatedAt || Date.now()),
+        reportCount: reports.length,
+        reports,
+        status: itemData.status || (reports.length > 0 ? 'flagged' : 'active'),
+        ingredients: itemData.ingredients || [],
+        allergens: itemData.allergens || [],
+        nutritionInfo: itemData.nutritionInfo || {}
+      });
+    }
+
+    return menuItems.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  } catch (error) {
+    console.error('Error fetching menu items for admin:', error);
+    throw error;
+  }
+}
+
+export async function getMenuItemReports(menuItemId: string) {
+  try {
+    const reportsQuery = query(
+      collection(db, 'menuItemReports'),
+      where('menuItemId', '==', menuItemId),
+      orderBy('reportedAt', 'desc')
+    );
+    
+    const reportsSnapshot = await getDocs(reportsQuery);
+    return reportsSnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      reportedAt: doc.data().reportedAt?.toDate ? doc.data().reportedAt.toDate() : new Date(doc.data().reportedAt)
+    }));
+  } catch (error) {
+    console.error('Error fetching menu item reports:', error);
+    return [];
+  }
+}
+
+export async function approveMenuItem(menuItemId: string) {
+  try {
+    // Update menu item status
+    await updateDoc(doc(db, 'menuItems', menuItemId), {
+      status: 'active',
+      updatedAt: Timestamp.now()
+    });
+
+    // Delete all reports for this item
+    const reportsQuery = query(
+      collection(db, 'menuItemReports'),
+      where('menuItemId', '==', menuItemId)
+    );
+    const reportsSnapshot = await getDocs(reportsQuery);
+    
+    const batch = writeBatch(db);
+    reportsSnapshot.docs.forEach(reportDoc => {
+      batch.delete(reportDoc.ref);
+    });
+    await batch.commit();
+
+    // Create admin notification
+    await createAdminNotification(
+      'Menu Item Approved',
+      'Flagged menu item has been approved and reports cleared',
+      'success'
+    );
+
+    return true;
+  } catch (error) {
+    console.error('Error approving menu item:', error);
+    throw error;
+  }
+}
+
+export async function removeMenuItem(menuItemId: string) {
+  try {
+    // Update menu item status
+    await updateDoc(doc(db, 'menuItems', menuItemId), {
+      status: 'removed',
+      isAvailable: false,
+      updatedAt: Timestamp.now()
+    });
+
+    // Create admin notification
+    await createAdminNotification(
+      'Menu Item Removed',
+      'Flagged menu item has been removed from the platform',
+      'warning'
+    );
+
+    return true;
+  } catch (error) {
+    console.error('Error removing menu item:', error);
+    throw error;
+  }
+}
+
+export async function reportMenuItem(menuItemId: string, reason: string, reportedBy: string) {
+  try {
+    // Add report to menuItemReports collection
+    await addDoc(collection(db, 'menuItemReports'), {
+      menuItemId,
+      reason,
+      reportedBy,
+      reportedAt: Timestamp.now(),
+      status: 'pending'
+    });
+
+    // Update menu item status if it has multiple reports
+    const reportsQuery = query(
+      collection(db, 'menuItemReports'),
+      where('menuItemId', '==', menuItemId)
+    );
+    const reportsSnapshot = await getDocs(reportsQuery);
+    
+    if (reportsSnapshot.docs.length >= 2) {
+      await updateDoc(doc(db, 'menuItems', menuItemId), {
+        status: 'flagged',
+        updatedAt: Timestamp.now()
+      });
+    }
+
+    // Create admin notification
+    await createAdminNotification(
+      'Menu Item Reported',
+      `A menu item has been reported: ${reason}`,
+      'warning'
+    );
+
+    return true;
+  } catch (error) {
+    console.error('Error reporting menu item:', error);
+    throw error;
+  }
+}
+
+export async function getRestaurantMenuItems(restaurantId: string) {
+  try {
+    const menuItemsQuery = query(
+      collection(db, 'menuItems'),
+      where('restaurantId', '==', restaurantId)
+    );
+    
+    const menuItemsSnapshot = await getDocs(menuItemsQuery);
+    const menuItems = [];
+
+    for (const doc of menuItemsSnapshot.docs) {
+      const itemData = doc.data();
+      
+      // Get reports for this item
+      const reportsQuery = query(
+        collection(db, 'menuItemReports'),
+        where('menuItemId', '==', doc.id)
+      );
+      const reportsSnapshot = await getDocs(reportsQuery);
+      const reports = reportsSnapshot.docs.map(reportDoc => ({
+        id: reportDoc.id,
+        ...reportDoc.data(),
+        reportedAt: reportDoc.data().reportedAt?.toDate ? reportDoc.data().reportedAt.toDate() : new Date(reportDoc.data().reportedAt)
+      }));
+
+      menuItems.push({
+        id: doc.id,
+        ...itemData,
+        createdAt: itemData.createdAt?.toDate ? itemData.createdAt.toDate() : new Date(itemData.createdAt || Date.now()),
+        updatedAt: itemData.updatedAt?.toDate ? itemData.updatedAt.toDate() : new Date(itemData.updatedAt || Date.now()),
+        reportCount: reports.length,
+        reports,
+        status: itemData.status || (reports.length > 0 ? 'flagged' : 'active')
+      });
+    }
+
+    return menuItems;
+  } catch (error) {
+    console.error('Error fetching restaurant menu items:', error);
+    throw error;
+  }
+}
+
+// Function to create specific vendor credentials for testing
+export async function createVendorCredentials() {
+  try {
+    const vendorCredentials = [
+      {
+        email: 'burgerking@swaadcourt.com',
+        password: 'BurgerKing@123',
+        name: 'Burger King Manager',
+        businessName: 'Burger King',
+        cuisine: ['Fast Food', 'American'],
+        phone: '+91 9876543210',
+        address: '123 Food Street, Mumbai'
+      },
+      {
+        email: 'pizzahut@swaadcourt.com', 
+        password: 'PizzaHut@123',
+        name: 'Pizza Hut Manager',
+        businessName: 'Pizza Hut',
+        cuisine: ['Italian', 'Pizza'],
+        phone: '+91 9876543211',
+        address: '456 Pizza Lane, Delhi'
+      },
+      {
+        email: 'kfc@swaadcourt.com',
+        password: 'KFC@123', 
+        name: 'KFC Manager',
+        businessName: 'KFC',
+        cuisine: ['Fast Food', 'Chicken'],
+        phone: '+91 9876543212',
+        address: '789 Chicken Street, Bangalore'
+      }
+    ];
+
+    const results = [];
+    const errors = [];
+
+    for (const vendor of vendorCredentials) {
+      try {
+        // Create Firebase Auth user
+        const userCredential = await createUserWithEmailAndPassword(auth, vendor.email, vendor.password);
+        const firebaseUser = userCredential.user;
+
+        // Create user profile in Firestore
+        const userProfile = {
+          uid: firebaseUser.uid,
+          email: vendor.email,
+          name: vendor.name,
+          businessName: vendor.businessName,
+          phone: vendor.phone,
+          address: vendor.address,
+          cuisine: vendor.cuisine,
+          role: 'vendor',
+          status: 'active',
+          isOpen: true,
+          deliveryTime: '20-30 mins',
+          averageRating: 4.0,
+          totalRatings: 0,
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now()
+        };
+
+        await setDoc(doc(db, 'users', firebaseUser.uid), userProfile);
+
+        // Create restaurant profile
+        const restaurantId = `restaurant_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const restaurantProfile = {
+          id: restaurantId,
+          name: vendor.businessName,
+          businessName: vendor.businessName,
+          description: `Delicious ${vendor.cuisine.join(' & ')} food`,
+          image: '/api/placeholder/400/300',
+          coverImage: '/api/placeholder/800/400',
+          cuisine: vendor.cuisine,
+          address: vendor.address,
+          phone: vendor.phone,
+          email: vendor.email,
+          rating: 4.0,
+          totalRatings: 0,
+          deliveryTime: '20-30 mins',
+          distance: '2.5 km',
+          tags: ['Popular', 'Fast Delivery'],
+          isVeg: false,
+          isPopular: true,
+          openingHours: {
+            open: '09:00',
+            close: '23:00'
+          },
+          status: 'active',
+          isOpen: true,
+          ownerId: firebaseUser.uid,
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now()
+        };
+
+        await setDoc(doc(db, 'restaurants', restaurantId), restaurantProfile);
+
+        // Link restaurant to user profile
+        await updateDoc(doc(db, 'users', firebaseUser.uid), {
+          restaurantId: restaurantId
+        });
+
+        results.push({
+          email: vendor.email,
+          password: vendor.password,
+          businessName: vendor.businessName,
+          restaurantId: restaurantId,
+          uid: firebaseUser.uid
+        });
+
+        console.log(`✅ Created vendor credentials for ${vendor.businessName}`);
+
+      } catch (error: any) {
+        if (error.code === 'auth/email-already-in-use') {
+          console.log(`⚠️ ${vendor.email} already exists`);
+          errors.push({
+            email: vendor.email,
+            businessName: vendor.businessName,
+            error: 'Email already exists'
+          });
+        } else {
+          console.error(`❌ Error creating ${vendor.businessName}:`, error);
+          errors.push({
+            email: vendor.email,
+            businessName: vendor.businessName,
+            error: error.message
+          });
+        }
+      }
+    }
+
+    return { results, errors };
+  } catch (error) {
+    console.error('Error creating vendor credentials:', error);
     throw error;
   }
 }

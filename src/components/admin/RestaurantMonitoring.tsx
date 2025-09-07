@@ -30,6 +30,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
+import {
+  getAllRestaurantsForAdmin,
+  getAllMenuItemsForAdmin,
+  approveMenuItem,
+  removeMenuItem,
+  getRestaurantMenuItems
+} from '@/lib/firebase';
 
 interface MenuItem {
   id: string;
@@ -87,80 +94,14 @@ export default function RestaurantMonitoring() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      // Mock data - replace with Firebase queries
-      const mockRestaurants: Restaurant[] = [
-        {
-          id: '1',
-          name: 'Pizza Palace',
-          cuisine: ['Italian', 'Continental'],
-          logo: '/api/placeholder/100/100',
-          menuItemsCount: 45,
-          flaggedItemsCount: 2,
-          averagePrice: 250,
-          status: 'active'
-        },
-        {
-          id: '2',
-          name: 'Spice Garden',
-          cuisine: ['Indian', 'North Indian'],
-          menuItemsCount: 78,
-          flaggedItemsCount: 0,
-          averagePrice: 180,
-          status: 'active'
-        }
-      ];
+      // Fetch real data from Firebase
+      const [restaurantsData, menuItemsData] = await Promise.all([
+        getAllRestaurantsForAdmin(),
+        getAllMenuItemsForAdmin()
+      ]);
 
-      const mockMenuItems: MenuItem[] = [
-        {
-          id: '1',
-          name: 'Margherita Pizza',
-          description: 'Classic pizza with fresh mozzarella and basil',
-          price: 350,
-          category: 'Pizza',
-          image: '/api/placeholder/200/150',
-          isVeg: true,
-          isAvailable: true,
-          restaurantId: '1',
-          restaurantName: 'Pizza Palace',
-          createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
-          updatedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
-          reportCount: 0,
-          reports: [],
-          status: 'active'
-        },
-        {
-          id: '2',
-          name: 'Suspicious Burger',
-          description: 'Questionable ingredients and poor quality',
-          price: 150,
-          category: 'Burgers',
-          isVeg: false,
-          isAvailable: true,
-          restaurantId: '1',
-          restaurantName: 'Pizza Palace',
-          createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
-          updatedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
-          reportCount: 3,
-          reports: [
-            {
-              id: '1',
-              reason: 'Poor food quality and hygiene concerns',
-              reportedBy: 'customer1@example.com',
-              reportedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000)
-            },
-            {
-              id: '2',
-              reason: 'Misleading description',
-              reportedBy: 'customer2@example.com',
-              reportedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000)
-            }
-          ],
-          status: 'flagged'
-        }
-      ];
-
-      setRestaurants(mockRestaurants);
-      setMenuItems(mockMenuItems);
+      setRestaurants(restaurantsData);
+      setMenuItems(menuItemsData);
     } catch (error) {
       console.error('Error loading data:', error);
       toast.error('Failed to load restaurant data');
@@ -193,23 +134,42 @@ export default function RestaurantMonitoring() {
 
   const handleRemoveItem = async (itemId: string) => {
     try {
+      await removeMenuItem(itemId);
+      // Update local state
       setMenuItems(prev => prev.map(item =>
         item.id === itemId ? { ...item, status: 'removed' as const, isAvailable: false } : item
       ));
       toast.success('Menu item removed successfully');
     } catch (error) {
+      console.error('Error removing menu item:', error);
       toast.error('Failed to remove menu item');
     }
   };
 
   const handleApproveItem = async (itemId: string) => {
     try {
+      await approveMenuItem(itemId);
+      // Update local state
       setMenuItems(prev => prev.map(item =>
         item.id === itemId ? { ...item, status: 'active' as const, reportCount: 0, reports: [] } : item
       ));
       toast.success('Menu item approved');
     } catch (error) {
+      console.error('Error approving menu item:', error);
       toast.error('Failed to approve menu item');
+    }
+  };
+
+  const handleViewRestaurantMenu = async (restaurantId: string) => {
+    try {
+      const restaurantMenuItems = await getRestaurantMenuItems(restaurantId);
+      // Filter current menu items to show only this restaurant's items
+      setFilteredItems(restaurantMenuItems);
+      setActiveTab('menu-items');
+      toast.success('Showing menu items for selected restaurant');
+    } catch (error) {
+      console.error('Error loading restaurant menu:', error);
+      toast.error('Failed to load restaurant menu');
     }
   };
 
@@ -273,7 +233,11 @@ export default function RestaurantMonitoring() {
                 </div>
 
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleViewRestaurantMenu(restaurant.id)}
+                  >
                     <Eye className="w-4 h-4 mr-2" />
                     View Menu
                   </Button>
@@ -416,7 +380,7 @@ export default function RestaurantMonitoring() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="border-0 shadow-lg">
           <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-gray-900">{restaurants.length}</div>
+            <div className="text-2xl font-bold text-black-900">{restaurants.length}</div>
             <div className="text-sm text-gray-600">Total Restaurants</div>
           </CardContent>
         </Card>
