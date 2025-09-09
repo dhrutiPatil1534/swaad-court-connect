@@ -29,6 +29,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
+import { useAuth } from '@/context/auth-context';
+import {
+  getVendorTransactions,
+  getVendorPaymentSummary
+} from '@/lib/firebase';
 
 interface Transaction {
   id: string;
@@ -45,13 +50,11 @@ interface Transaction {
 }
 
 interface PaymentSummary {
-  totalRevenue: number;
-  totalTransactions: number;
-  pendingAmount: number;
-  completedAmount: number;
-  refundedAmount: number;
-  commission: number;
-  netEarnings: number;
+  totalEarnings: number;
+  pendingPayouts: number;
+  completedPayouts: number;
+  lastPayoutDate: Date;
+  nextPayoutDate: Date;
 }
 
 interface PayoutRequest {
@@ -64,15 +67,14 @@ interface PayoutRequest {
 }
 
 export default function BillingTransactions() {
+  const { user } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [paymentSummary, setPaymentSummary] = useState<PaymentSummary>({
-    totalRevenue: 0,
-    totalTransactions: 0,
-    pendingAmount: 0,
-    completedAmount: 0,
-    refundedAmount: 0,
-    commission: 0,
-    netEarnings: 0
+    totalEarnings: 0,
+    pendingPayouts: 0,
+    completedPayouts: 0,
+    lastPayoutDate: new Date(),
+    nextPayoutDate: new Date()
   });
   const [payoutRequests, setPayoutRequests] = useState<PayoutRequest[]>([]);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
@@ -81,113 +83,76 @@ export default function BillingTransactions() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isPayoutDialogOpen, setIsPayoutDialogOpen] = useState(false);
   const [payoutAmount, setPayoutAmount] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    loadBillingData();
-  }, [dateRange, statusFilter]);
+    if (user?.uid) {
+      loadBillingData();
+    }
+  }, [dateRange, statusFilter, user]);
 
   const loadBillingData = async () => {
-    // Mock data - replace with Firebase queries
-    const mockTransactions: Transaction[] = [
-      {
-        id: '1',
-        orderId: 'ORD-001',
-        customerName: 'John Doe',
-        amount: 450,
-        paymentMethod: 'card',
-        status: 'completed',
-        transactionId: 'TXN-123456',
-        timestamp: new Date('2024-01-15T14:30:00'),
-        commission: 22.5,
-        netAmount: 427.5,
-        description: 'Order payment for Chicken Burger + Fries'
-      },
-      {
-        id: '2',
-        orderId: 'ORD-002',
-        customerName: 'Jane Smith',
-        amount: 280,
-        paymentMethod: 'upi',
-        status: 'completed',
-        transactionId: 'TXN-123457',
-        timestamp: new Date('2024-01-15T13:15:00'),
-        commission: 14,
-        netAmount: 266,
-        description: 'Order payment for Margherita Pizza'
-      },
-      {
-        id: '3',
-        orderId: 'ORD-003',
-        customerName: 'Mike Johnson',
-        amount: 320,
-        paymentMethod: 'wallet',
-        status: 'pending',
-        transactionId: 'TXN-123458',
-        timestamp: new Date('2024-01-15T12:45:00'),
-        commission: 16,
-        netAmount: 304,
-        description: 'Order payment for Pasta Combo'
-      },
-      {
-        id: '4',
-        orderId: 'ORD-004',
-        customerName: 'Sarah Wilson',
-        amount: 180,
-        paymentMethod: 'card',
-        status: 'refunded',
-        transactionId: 'TXN-123459',
-        timestamp: new Date('2024-01-14T19:20:00'),
-        commission: 9,
-        netAmount: 171,
-        description: 'Refunded - Order cancelled by customer'
-      },
-      {
-        id: '5',
-        orderId: 'ORD-005',
-        customerName: 'David Brown',
-        amount: 520,
-        paymentMethod: 'upi',
-        status: 'failed',
-        transactionId: 'TXN-123460',
-        timestamp: new Date('2024-01-14T18:10:00'),
-        commission: 26,
-        netAmount: 494,
-        description: 'Payment failed - Insufficient balance'
-      }
-    ];
-
-    const mockPayoutRequests: PayoutRequest[] = [
-      {
-        id: '1',
-        amount: 15000,
-        requestDate: new Date('2024-01-10'),
-        status: 'completed',
-        bankAccount: '****1234',
-        expectedDate: new Date('2024-01-12')
-      },
-      {
-        id: '2',
-        amount: 8500,
-        requestDate: new Date('2024-01-08'),
-        status: 'processing',
-        bankAccount: '****1234',
-        expectedDate: new Date('2024-01-16')
-      }
-    ];
-
-    const mockSummary: PaymentSummary = {
-      totalRevenue: 26200,
-      totalTransactions: 154,
-      pendingAmount: 2400,
-      completedAmount: 22800,
-      refundedAmount: 1000,
-      commission: 1310,
-      netEarnings: 24890
-    };
-
-    setTransactions(mockTransactions);
-    setPayoutRequests(mockPayoutRequests);
-    setPaymentSummary(mockSummary);
+    if (!user?.uid) return;
+    
+    setIsLoading(true);
+    try {
+      const [transactionsData, summaryData] = await Promise.all([
+        getVendorTransactions(user.uid, dateRange, statusFilter),
+        getVendorPaymentSummary(user.uid)
+      ]);
+      
+      const transactionData = transactionsData.map((order: any) => ({
+        id: order.id,
+        orderId: order.id,
+        customerName: order.customerName || 'Unknown Customer',
+        amount: order.pricing?.totalAmount || 0,
+        paymentMethod: order.payment?.method || 'unknown',
+        status: (order.payment?.status === 'Completed' ? 'completed' : 
+                order.payment?.status === 'Pending' ? 'pending' : 
+                order.payment?.status === 'Failed' ? 'failed' : 
+                order.payment?.status === 'Refunded' ? 'refunded' : 'pending') as 'completed' | 'pending' | 'failed' | 'refunded',
+        transactionId: order.payment?.transactionId || '',
+        timestamp: order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt || Date.now()),
+        commission: (order.pricing?.totalAmount || 0) * 0.05,
+        netAmount: (order.pricing?.totalAmount || 0) * 0.95,
+        description: `Order payment for ${order.items?.length || 0} items`
+      }));
+      
+      setTransactions(transactionData);
+      setPaymentSummary({
+        totalEarnings: summaryData.totalEarnings || 0,
+        pendingPayouts: summaryData.pendingPayouts || 0,
+        completedPayouts: summaryData.completedPayouts || 0,
+        lastPayoutDate: summaryData.lastPayoutDate,
+        nextPayoutDate: summaryData.nextPayoutDate
+      });
+      
+      // Mock payout requests for now - can be implemented later
+      const mockPayoutRequests: PayoutRequest[] = [
+        {
+          id: '1',
+          amount: 15000,
+          requestDate: new Date('2024-01-10'),
+          status: 'completed',
+          bankAccount: '****1234',
+          expectedDate: new Date('2024-01-12')
+        },
+        {
+          id: '2',
+          amount: 8500,
+          requestDate: new Date('2024-01-08'),
+          status: 'processing',
+          bankAccount: '****1234',
+          expectedDate: new Date('2024-01-16')
+        }
+      ];
+      setPayoutRequests(mockPayoutRequests);
+    } catch (error) {
+      console.error('Error loading billing data:', error);
+      toast.error('Failed to load billing data');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const filteredTransactions = transactions.filter(transaction => {
@@ -244,7 +209,7 @@ export default function BillingTransactions() {
   };
 
   const handleRequestPayout = async () => {
-    if (payoutAmount <= 0 || payoutAmount > paymentSummary.netEarnings) {
+    if (payoutAmount <= 0 || payoutAmount > paymentSummary.totalEarnings) {
       toast.error('Invalid payout amount');
       return;
     }
@@ -268,6 +233,15 @@ export default function BillingTransactions() {
     // Implementation for exporting transaction data
     toast.success('Transaction report exported successfully');
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+        <span className="ml-3 text-gray-600">Loading billing data...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -306,8 +280,8 @@ export default function BillingTransactions() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600 mb-1">Total Revenue</p>
-                  <p className="text-2xl font-bold text-green-600">₹{paymentSummary.totalRevenue.toLocaleString()}</p>
+                  <p className="text-sm text-gray-600 mb-1">Total Earnings</p>
+                  <p className="text-2xl font-bold text-green-600">₹{paymentSummary.totalEarnings.toLocaleString()}</p>
                   <div className="flex items-center gap-1 mt-2">
                     <TrendingUp className="w-4 h-4 text-green-500" />
                     <span className="text-sm text-green-600">+12.5%</span>
@@ -330,32 +304,8 @@ export default function BillingTransactions() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600 mb-1">Net Earnings</p>
-                  <p className="text-2xl font-bold text-blue-600">₹{paymentSummary.netEarnings.toLocaleString()}</p>
-                  <div className="flex items-center gap-1 mt-2">
-                    <Receipt className="w-4 h-4 text-blue-500" />
-                    <span className="text-sm text-blue-600">After commission</span>
-                  </div>
-                </div>
-                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                  <Wallet className="w-6 h-6 text-blue-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-        >
-          <Card className="border-0 shadow-lg">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600 mb-1">Pending Amount</p>
-                  <p className="text-2xl font-bold text-orange-600">₹{paymentSummary.pendingAmount.toLocaleString()}</p>
+                  <p className="text-sm text-gray-600 mb-1">Pending Payouts</p>
+                  <p className="text-2xl font-bold text-orange-600">₹{paymentSummary.pendingPayouts.toLocaleString()}</p>
                   <div className="flex items-center gap-1 mt-2">
                     <Clock className="w-4 h-4 text-orange-500" />
                     <span className="text-sm text-orange-600">Processing</span>
@@ -372,14 +322,14 @@ export default function BillingTransactions() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
+          transition={{ delay: 0.3 }}
         >
           <Card className="border-0 shadow-lg">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600 mb-1">Total Transactions</p>
-                  <p className="text-2xl font-bold text-purple-600">{paymentSummary.totalTransactions}</p>
+                  <p className="text-sm text-gray-600 mb-1">Completed Payouts</p>
+                  <p className="text-2xl font-bold text-purple-600">{paymentSummary.completedPayouts}</p>
                   <div className="flex items-center gap-1 mt-2">
                     <CreditCard className="w-4 h-4 text-purple-500" />
                     <span className="text-sm text-purple-600">This month</span>
@@ -387,6 +337,30 @@ export default function BillingTransactions() {
                 </div>
                 <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
                   <CreditCard className="w-6 h-6 text-purple-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+        >
+          <Card className="border-0 shadow-lg">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600 mb-1">Last Payout Date</p>
+                  <p className="text-2xl font-bold text-blue-600">{paymentSummary.lastPayoutDate.toLocaleDateString()}</p>
+                  <div className="flex items-center gap-1 mt-2">
+                    <Calendar className="w-4 h-4 text-blue-500" />
+                    <span className="text-sm text-blue-600">Last payout</span>
+                  </div>
+                </div>
+                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                  <Calendar className="w-6 h-6 text-blue-600" />
                 </div>
               </div>
             </CardContent>
@@ -565,20 +539,20 @@ export default function BillingTransactions() {
                 <div className="space-y-4">
                   <div className="flex justify-between items-center">
                     <span>Gross Revenue</span>
-                    <span className="font-bold">₹{paymentSummary.totalRevenue.toLocaleString()}</span>
+                    <span className="font-bold">₹{paymentSummary.totalEarnings.toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between items-center text-red-600">
                     <span>Platform Commission (5%)</span>
-                    <span className="font-bold">-₹{paymentSummary.commission.toLocaleString()}</span>
+                    <span className="font-bold">-₹{(paymentSummary.totalEarnings * 0.05).toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between items-center text-orange-600">
                     <span>Refunds</span>
-                    <span className="font-bold">-₹{paymentSummary.refundedAmount.toLocaleString()}</span>
+                    <span className="font-bold">-₹{0}</span>
                   </div>
                   <hr />
                   <div className="flex justify-between items-center text-green-600 font-bold text-lg">
                     <span>Net Earnings</span>
-                    <span>₹{paymentSummary.netEarnings.toLocaleString()}</span>
+                    <span>₹{(paymentSummary.totalEarnings * 0.95).toLocaleString()}</span>
                   </div>
                 </div>
               </CardContent>
@@ -708,7 +682,7 @@ export default function BillingTransactions() {
           <div className="space-y-4">
             <div>
               <Label>Available Balance</Label>
-              <p className="text-2xl font-bold text-green-600">₹{paymentSummary.netEarnings.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-green-600">₹{paymentSummary.totalEarnings.toLocaleString()}</p>
             </div>
             
             <div>
@@ -719,7 +693,7 @@ export default function BillingTransactions() {
                 value={payoutAmount}
                 onChange={(e) => setPayoutAmount(Number(e.target.value))}
                 placeholder="Enter amount"
-                max={paymentSummary.netEarnings}
+                max={paymentSummary.totalEarnings}
               />
             </div>
             

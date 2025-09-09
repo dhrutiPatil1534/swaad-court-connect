@@ -30,6 +30,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '@/context/auth-context';
+import {
+  getVendorMenuItems,
+  addMenuItem,
+  updateMenuItem,
+  deleteMenuItem,
+  getMenuCategories,
+  addMenuCategory
+} from '@/lib/firebase';
 
 interface MenuItem {
   id: string;
@@ -63,6 +72,7 @@ interface Category {
 }
 
 export default function MenuManagement() {
+  const { user } = useAuth();
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -72,6 +82,7 @@ export default function MenuManagement() {
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [isLoading, setIsLoading] = useState(true);
 
   const [newItem, setNewItem] = useState<Partial<MenuItem>>({
     name: '',
@@ -98,83 +109,39 @@ export default function MenuManagement() {
   });
 
   useEffect(() => {
-    loadMenuData();
-  }, []);
+    if (user?.uid) {
+      loadMenuData();
+    }
+  }, [user]);
 
   const loadMenuData = async () => {
-    // Mock data - replace with Firebase queries
-    const mockCategories: Category[] = [
-      { id: '1', name: 'Burgers', description: 'Delicious burgers', image: '', isActive: true, sortOrder: 1, itemCount: 8 },
-      { id: '2', name: 'Pizza', description: 'Fresh pizzas', image: '', isActive: true, sortOrder: 2, itemCount: 6 },
-      { id: '3', name: 'Beverages', description: 'Refreshing drinks', image: '', isActive: true, sortOrder: 3, itemCount: 12 },
-      { id: '4', name: 'Desserts', description: 'Sweet treats', image: '', isActive: true, sortOrder: 4, itemCount: 5 }
-    ];
-
-    const mockMenuItems: MenuItem[] = [
-      {
-        id: '1',
-        name: 'Classic Chicken Burger',
-        description: 'Juicy chicken patty with lettuce, tomato, and special sauce',
-        price: 250,
-        category: 'Burgers',
-        image: '/api/placeholder/300/200',
-        isVeg: false,
-        isAvailable: true,
-        preparationTime: 15,
-        rating: 4.5,
-        totalOrders: 145,
-        ingredients: ['Chicken', 'Lettuce', 'Tomato', 'Bun', 'Special Sauce'],
-        allergens: ['Gluten', 'Eggs'],
-        calories: 520,
-        spiceLevel: 'mild',
-        tags: ['Popular', 'Bestseller'],
-        createdAt: new Date(),
-        updatedAt: new Date()
-      },
-      {
-        id: '2',
-        name: 'Margherita Pizza',
-        description: 'Classic pizza with fresh mozzarella and basil',
-        price: 350,
-        category: 'Pizza',
-        image: '/api/placeholder/300/200',
-        isVeg: true,
-        isAvailable: true,
-        preparationTime: 20,
-        rating: 4.7,
-        totalOrders: 98,
-        ingredients: ['Mozzarella', 'Tomato Sauce', 'Basil', 'Pizza Dough'],
-        allergens: ['Gluten', 'Dairy'],
-        calories: 280,
-        spiceLevel: 'mild',
-        tags: ['Classic', 'Vegetarian'],
-        createdAt: new Date(),
-        updatedAt: new Date()
-      },
-      {
-        id: '3',
-        name: 'Mango Lassi',
-        description: 'Creamy yogurt drink with fresh mango',
-        price: 120,
-        category: 'Beverages',
-        image: '/api/placeholder/300/200',
-        isVeg: true,
-        isAvailable: true,
-        preparationTime: 5,
-        rating: 4.3,
-        totalOrders: 67,
-        ingredients: ['Mango', 'Yogurt', 'Sugar', 'Cardamom'],
-        allergens: ['Dairy'],
-        calories: 180,
-        spiceLevel: 'mild',
-        tags: ['Refreshing', 'Traditional'],
-        createdAt: new Date(),
-        updatedAt: new Date()
-      }
-    ];
-
-    setCategories(mockCategories);
-    setMenuItems(mockMenuItems);
+    if (!user?.uid) return;
+    
+    setIsLoading(true);
+    try {
+      const [menuItemsData, categoriesData] = await Promise.all([
+        getVendorMenuItems(user.uid),
+        getMenuCategories(user.uid)
+      ]);
+      
+      setMenuItems(menuItemsData);
+      const formattedCategories = categoriesData.map((cat: any) => ({
+        id: cat.id,
+        name: cat.name || 'Unnamed Category',
+        description: cat.description || '',
+        image: cat.image || '',
+        isActive: cat.isActive !== undefined ? cat.isActive : true,
+        sortOrder: cat.sortOrder || 0,
+        itemCount: cat.itemCount || 0,
+        createdAt: cat.createdAt || new Date()
+      }));
+      setCategories(formattedCategories);
+    } catch (error) {
+      console.error('Error loading menu data:', error);
+      toast.error('Failed to load menu data');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const filteredItems = menuItems.filter(item => {
@@ -185,105 +152,116 @@ export default function MenuManagement() {
   });
 
   const handleAddItem = async () => {
-    if (!newItem.name || !newItem.price || !newItem.category) {
+    if (!newItem.name || !newItem.price || !newItem.category || !user?.uid) {
       toast.error('Please fill in all required fields');
       return;
     }
 
-    const item: MenuItem = {
-      id: Date.now().toString(),
-      name: newItem.name!,
-      description: newItem.description || '',
-      price: newItem.price!,
-      category: newItem.category!,
-      image: newItem.image || '/api/placeholder/300/200',
-      isVeg: newItem.isVeg || true,
-      isAvailable: newItem.isAvailable || true,
-      preparationTime: newItem.preparationTime || 15,
-      rating: 0,
-      totalOrders: 0,
-      ingredients: newItem.ingredients || [],
-      allergens: newItem.allergens || [],
-      calories: newItem.calories || 0,
-      spiceLevel: newItem.spiceLevel || 'mild',
-      tags: newItem.tags || [],
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
-
-    setMenuItems(prev => [...prev, item]);
-    setNewItem({
-      name: '',
-      description: '',
-      price: 0,
-      category: '',
-      image: '',
-      isVeg: true,
-      isAvailable: true,
-      preparationTime: 15,
-      ingredients: [],
-      allergens: [],
-      calories: 0,
-      spiceLevel: 'mild',
-      tags: []
-    });
-    setIsAddItemOpen(false);
-    toast.success('Menu item added successfully');
+    try {
+      const addedItem = await addMenuItem(user.uid, newItem);
+      setMenuItems(prev => [addedItem as unknown as MenuItem, ...prev]);
+      
+      setNewItem({
+        name: '',
+        description: '',
+        price: 0,
+        category: '',
+        image: '',
+        isVeg: true,
+        isAvailable: true,
+        preparationTime: 15,
+        ingredients: [],
+        allergens: [],
+        calories: 0,
+        spiceLevel: 'mild',
+        tags: []
+      });
+      setIsAddItemOpen(false);
+      toast.success('Menu item added successfully');
+    } catch (error) {
+      console.error('Error adding menu item:', error);
+      toast.error('Failed to add menu item');
+    }
   };
 
   const handleUpdateItem = async () => {
     if (!editingItem) return;
 
-    setMenuItems(prev => prev.map(item => 
-      item.id === editingItem.id 
-        ? { ...editingItem, updatedAt: new Date() }
-        : item
-    ));
-    setEditingItem(null);
-    toast.success('Menu item updated successfully');
+    try {
+      await updateMenuItem(editingItem.id, editingItem);
+      setMenuItems(prev => prev.map(item => 
+        item.id === editingItem.id ? editingItem : item
+      ));
+      setEditingItem(null);
+      toast.success('Menu item updated successfully');
+    } catch (error) {
+      console.error('Error updating menu item:', error);
+      toast.error('Failed to update menu item');
+    }
   };
 
   const handleDeleteItem = async (itemId: string) => {
-    setMenuItems(prev => prev.filter(item => item.id !== itemId));
-    toast.success('Menu item deleted successfully');
+    try {
+      await deleteMenuItem(user.uid, itemId);
+      setMenuItems(prev => prev.filter(item => item.id !== itemId));
+      toast.success('Menu item deleted successfully');
+    } catch (error) {
+      console.error('Error deleting menu item:', error);
+      toast.error('Failed to delete menu item');
+    }
   };
 
   const toggleItemAvailability = async (itemId: string) => {
-    setMenuItems(prev => prev.map(item => 
-      item.id === itemId 
-        ? { ...item, isAvailable: !item.isAvailable, updatedAt: new Date() }
-        : item
-    ));
-    toast.success('Item availability updated');
+    try {
+      const item = menuItems.find(item => item.id === itemId);
+      if (!item) return;
+      
+      const updatedItem = { ...item, isAvailable: !item.isAvailable };
+      await updateMenuItem(user.uid, itemId, { isAvailable: updatedItem.isAvailable });
+      
+      setMenuItems(prev => prev.map(item => 
+        item.id === itemId ? updatedItem : item
+      ));
+      toast.success('Item availability updated');
+    } catch (error) {
+      console.error('Error updating availability:', error);
+      toast.error('Failed to update availability');
+    }
   };
 
   const handleAddCategory = async () => {
-    if (!newCategory.name) {
+    if (!newCategory.name || !user?.uid) {
       toast.error('Please enter category name');
       return;
     }
 
-    const category: Category = {
-      id: Date.now().toString(),
-      name: newCategory.name!,
-      description: newCategory.description || '',
-      image: newCategory.image || '',
-      isActive: newCategory.isActive || true,
-      sortOrder: newCategory.sortOrder || categories.length + 1,
-      itemCount: 0
-    };
-
-    setCategories(prev => [...prev, category]);
-    setNewCategory({
-      name: '',
-      description: '',
-      image: '',
-      isActive: true,
-      sortOrder: 0
-    });
-    setIsAddCategoryOpen(false);
-    toast.success('Category added successfully');
+    try {
+      const addedCategory = await addMenuCategory(user.uid, newCategory);
+      setCategories(prev => [...prev, addedCategory]);
+      
+      setNewCategory({
+        name: '',
+        description: '',
+        image: '',
+        isActive: true,
+        sortOrder: 0
+      });
+      setIsAddCategoryOpen(false);
+      toast.success('Category added successfully');
+    } catch (error) {
+      console.error('Error adding category:', error);
+      toast.error('Failed to add category');
+    }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+        <span className="ml-3 text-gray-600">Loading menu...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

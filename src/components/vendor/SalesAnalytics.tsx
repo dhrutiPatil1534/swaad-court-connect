@@ -22,6 +22,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { motion } from 'framer-motion';
+import { useAuth } from '@/context/auth-context';
+import { getVendorAnalytics } from '@/lib/firebase';
 
 interface SalesData {
   period: string;
@@ -49,6 +51,7 @@ interface RevenueMetrics {
 }
 
 export default function SalesAnalytics() {
+  const { user } = useAuth();
   const [timeRange, setTimeRange] = useState('7d');
   const [salesData, setSalesData] = useState<SalesData[]>([]);
   const [topProducts, setTopProducts] = useState<ProductAnalytics[]>([]);
@@ -60,49 +63,43 @@ export default function SalesAnalytics() {
     growthRate: 0,
     completionRate: 0
   });
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    loadAnalyticsData();
-  }, [timeRange]);
+    if (user?.uid) {
+      loadAnalyticsData();
+    }
+  }, [timeRange, user]);
 
   const loadAnalyticsData = async () => {
-    // Mock data - replace with Firebase queries
-    const mockSalesData: SalesData[] = [
-      { period: 'Mon', revenue: 2500, orders: 15, customers: 12 },
-      { period: 'Tue', revenue: 3200, orders: 18, customers: 16 },
-      { period: 'Wed', revenue: 2800, orders: 16, customers: 14 },
-      { period: 'Thu', revenue: 3800, orders: 22, customers: 19 },
-      { period: 'Fri', revenue: 4200, orders: 25, customers: 21 },
-      { period: 'Sat', revenue: 5100, orders: 30, customers: 26 },
-      { period: 'Sun', revenue: 4600, orders: 28, customers: 24 }
-    ];
-
-    const mockTopProducts: ProductAnalytics[] = [
-      { id: '1', name: 'Chicken Burger', category: 'Burgers', totalSold: 45, revenue: 11250, isVeg: false },
-      { id: '2', name: 'Veg Pizza', category: 'Pizza', totalSold: 38, revenue: 13300, isVeg: true },
-      { id: '3', name: 'French Fries', category: 'Sides', totalSold: 52, revenue: 6240, isVeg: true },
-      { id: '4', name: 'Pasta Alfredo', category: 'Pasta', totalSold: 28, revenue: 7840, isVeg: true },
-      { id: '5', name: 'Chocolate Shake', category: 'Beverages', totalSold: 35, revenue: 5250, isVeg: true }
-    ];
-
-    const mockMetrics: RevenueMetrics = {
-      totalRevenue: 26200,
-      totalOrders: 154,
-      avgOrderValue: 170,
-      totalCustomers: 132,
-      growthRate: 15.4,
-      completionRate: 94.2
-    };
-
-    setSalesData(mockSalesData);
-    setTopProducts(mockTopProducts);
-    setRevenueMetrics(mockMetrics);
+    if (!user?.uid) return;
+    
+    setIsLoading(true);
+    try {
+      const analyticsData = await getVendorAnalytics(user.uid, timeRange);
+      setSalesData(analyticsData.salesData);
+      setTopProducts(analyticsData.topProducts);
+      setRevenueMetrics(analyticsData.revenueMetrics);
+    } catch (error) {
+      console.error('Error loading analytics data:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const exportReport = () => {
     // Implementation for exporting analytics report
     console.log('Exporting analytics report...');
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+        <span className="ml-3 text-gray-600">Loading analytics...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

@@ -34,6 +34,13 @@ import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
+import { useAuth } from '@/context/auth-context';
+import {
+  getVendorProfile,
+  updateVendorProfile,
+  getVendorNotificationSettings,
+  updateVendorNotificationSettings
+} from '@/lib/firebase';
 
 interface RestaurantProfile {
   id: string;
@@ -85,9 +92,11 @@ interface NotificationSettings {
 }
 
 export default function VendorSettings() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('profile');
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   const [restaurantProfile, setRestaurantProfile] = useState<RestaurantProfile>({
     id: '1',
@@ -150,16 +159,85 @@ export default function VendorSettings() {
 
   const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 
+  useEffect(() => {
+    if (user?.uid) {
+      loadVendorSettings();
+    }
+  }, [user]);
+
+  const loadVendorSettings = async () => {
+    if (!user?.uid) return;
+    
+    setIsLoading(true);
+    try {
+      const [profileData, notificationData] = await Promise.all([
+        getVendorProfile(user.uid),
+        getVendorNotificationSettings(user.uid)
+      ]);
+      
+      if (profileData) {
+        setRestaurantProfile({
+          id: profileData.id,
+          name: profileData.businessName || profileData.name,
+          description: profileData.description || 'Authentic cuisine with fresh ingredients',
+          cuisine: profileData.cuisine || ['Indian'],
+          address: profileData.address || '',
+          city: profileData.city || '',
+          state: profileData.state || '',
+          pincode: profileData.pincode || '',
+          phone: profileData.phone || '',
+          email: profileData.email || '',
+          website: profileData.website || '',
+          logo: profileData.logo || '/api/placeholder/150/150',
+          coverImage: profileData.coverImage || '/api/placeholder/800/300',
+          rating: profileData.rating || 4.5,
+          isActive: profileData.isOpen !== undefined ? profileData.isOpen : true,
+          deliveryRadius: profileData.deliveryRadius || 5,
+          minimumOrder: profileData.minimumOrder || 200,
+          deliveryFee: profileData.deliveryFee || 40,
+          estimatedDeliveryTime: profileData.estimatedDeliveryTime || '30-45 mins',
+          openingHours: profileData.openingHours || {
+            monday: { open: '10:00', close: '22:00', isOpen: true },
+            tuesday: { open: '10:00', close: '22:00', isOpen: true },
+            wednesday: { open: '10:00', close: '22:00', isOpen: true },
+            thursday: { open: '10:00', close: '22:00', isOpen: true },
+            friday: { open: '10:00', close: '23:00', isOpen: true },
+            saturday: { open: '10:00', close: '23:00', isOpen: true },
+            sunday: { open: '11:00', close: '21:00', isOpen: true }
+          },
+          socialMedia: profileData.socialMedia || {
+            facebook: '',
+            instagram: '',
+            twitter: ''
+          },
+          bankDetails: profileData.bankDetails || {
+            accountNumber: '****1234',
+            ifscCode: 'HDFC0001234',
+            accountHolderName: profileData.businessName || profileData.name,
+            bankName: 'HDFC Bank'
+          }
+        });
+      }
+      
+      setNotificationSettings(notificationData);
+    } catch (error) {
+      console.error('Error loading vendor settings:', error);
+      toast.error('Failed to load settings');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleSaveProfile = async () => {
+    if (!user?.uid) return;
+    
     setIsSaving(true);
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Here you would save to Firebase
+      await updateVendorProfile(user.uid, restaurantProfile);
       toast.success('Restaurant profile updated successfully');
       setIsEditing(false);
     } catch (error) {
+      console.error('Error updating profile:', error);
       toast.error('Failed to update profile');
     } finally {
       setIsSaving(false);
@@ -167,11 +245,14 @@ export default function VendorSettings() {
   };
 
   const handleSaveNotifications = async () => {
+    if (!user?.uid) return;
+    
     setIsSaving(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await updateVendorNotificationSettings(user.uid, notificationSettings);
       toast.success('Notification settings updated');
     } catch (error) {
+      console.error('Error updating notifications:', error);
       toast.error('Failed to update settings');
     } finally {
       setIsSaving(false);
@@ -207,6 +288,15 @@ export default function VendorSettings() {
       }
     }));
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+        <span className="ml-3 text-gray-600">Loading settings...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

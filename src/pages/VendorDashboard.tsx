@@ -11,26 +11,32 @@ import {
   Menu,
   X,
   TrendingUp,
-  Users,
   Clock,
   DollarSign,
   ChefHat,
   Eye,
-  CheckCircle,
-  AlertCircle,
-  Calendar,
-  Filter,
-  Download,
-  Plus
+  Plus,
+  Store,
+  Users,
+  Star
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/context/auth-context';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'sonner';
+import {
+  getVendorOrdersRealtime,
+  getVendorProfile,
+  getVendorStats,
+  getVendorAnalytics,
+  updateOrderStatus,
+  createSampleVendorData
+} from '@/lib/firebase';
 
 // Import dashboard components
 import OrdersManagement from '@/components/vendor/OrdersManagement';
@@ -46,30 +52,265 @@ interface DashboardStats {
   completedOrders: number;
   totalMenuItems: number;
   avgOrderValue: number;
+  totalRevenue: number;
+  completionRate: number;
 }
 
-const sidebarItems = [
-  { id: 'overview', label: 'Dashboard', icon: BarChart3 },
-  { id: 'orders', label: 'Orders', icon: ShoppingBag, badge: 'live' },
-  { id: 'menu', label: 'Menu Management', icon: ChefHat },
-  { id: 'analytics', label: 'Sales & Analytics', icon: TrendingUp },
-  { id: 'billing', label: 'Billing & Transactions', icon: CreditCard },
-  { id: 'settings', label: 'Settings', icon: Settings },
-];
+interface VendorProfile {
+  id: string;
+  name: string;
+  businessName: string;
+  email: string;
+  phone: string;
+  address: string;
+  cuisine: string[];
+  logo?: string;
+  rating: number;
+  isOpen: boolean;
+}
+
+// Dashboard Overview Component
+const DashboardOverview = ({ 
+  stats, 
+  recentOrders, 
+  vendorProfile, 
+  onTabChange 
+}: {
+  stats: DashboardStats;
+  recentOrders: any[];
+  vendorProfile: VendorProfile | null;
+  onTabChange: (tab: string) => void;
+}) => {
+  return (
+    <div className="space-y-6">
+      {/* Restaurant Status Banner */}
+      {vendorProfile && (
+        <Card className="bg-gradient-to-r from-orange-500 to-amber-500 text-white border-0">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center">
+                  <Store className="w-8 h-8" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold">{vendorProfile.businessName}</h2>
+                  <div className="flex items-center gap-4 mt-2">
+                    <div className="flex items-center gap-1">
+                      <Star className="w-4 h-4 fill-current" />
+                      <span className="font-medium">{vendorProfile.rating.toFixed(1)}</span>
+                    </div>
+                    <Badge 
+                      variant={vendorProfile.isOpen ? "secondary" : "destructive"}
+                      className="bg-white/20 text-white border-white/30"
+                    >
+                      {vendorProfile.isOpen ? 'Open' : 'Closed'}
+                    </Badge>
+                    <span className="text-sm opacity-90">
+                      {vendorProfile.cuisine.join(', ')}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+        >
+          <Card className="bg-gradient-to-br from-blue-50 to-indigo-100 border-blue-200">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-blue-600">Today's Orders</p>
+                  <p className="text-3xl font-bold text-blue-900">{stats.todayOrders}</p>
+                </div>
+                <div className="w-12 h-12 bg-blue-500 rounded-xl flex items-center justify-center">
+                  <ShoppingBag className="w-6 h-6 text-white" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+        >
+          <Card className="bg-gradient-to-br from-green-50 to-emerald-100 border-green-200">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-green-600">Today's Revenue</p>
+                  <p className="text-3xl font-bold text-green-900">₹{stats.todayRevenue.toLocaleString()}</p>
+                </div>
+                <div className="w-12 h-12 bg-green-500 rounded-xl flex items-center justify-center">
+                  <DollarSign className="w-6 h-6 text-white" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+        >
+          <Card className="bg-gradient-to-br from-orange-50 to-amber-100 border-orange-200">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-orange-600">Pending Orders</p>
+                  <p className="text-3xl font-bold text-orange-900">{stats.pendingOrders}</p>
+                </div>
+                <div className="w-12 h-12 bg-orange-500 rounded-xl flex items-center justify-center">
+                  <Clock className="w-6 h-6 text-white" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+        >
+          <Card className="bg-gradient-to-br from-purple-50 to-violet-100 border-purple-200">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-purple-600">Completion Rate</p>
+                  <p className="text-3xl font-bold text-purple-900">{stats.completionRate}%</p>
+                </div>
+                <div className="w-12 h-12 bg-purple-500 rounded-xl flex items-center justify-center">
+                  <TrendingUp className="w-6 h-6 text-white" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      </div>
+
+      {/* Quick Actions */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Package className="w-5 h-5" />
+            Quick Actions
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Button
+              variant="outline"
+              className="h-20 flex-col gap-2 hover:bg-orange-50 hover:border-orange-200"
+              onClick={() => onTabChange('menu')}
+            >
+              <Plus className="w-6 h-6 text-orange-500" />
+              <span className="text-sm">Add Menu Item</span>
+            </Button>
+            <Button
+              variant="outline"
+              className="h-20 flex-col gap-2 hover:bg-blue-50 hover:border-blue-200"
+              onClick={() => onTabChange('analytics')}
+            >
+              <BarChart3 className="w-6 h-6 text-blue-500" />
+              <span className="text-sm">View Analytics</span>
+            </Button>
+            <Button
+              variant="outline"
+              className="h-20 flex-col gap-2 hover:bg-green-50 hover:border-green-200"
+              onClick={() => onTabChange('orders')}
+            >
+              <Eye className="w-6 h-6 text-green-500" />
+              <span className="text-sm">Manage Orders</span>
+            </Button>
+            <Button
+              variant="outline"
+              className="h-20 flex-col gap-2 hover:bg-purple-50 hover:border-purple-200"
+              onClick={() => onTabChange('settings')}
+            >
+              <Settings className="w-6 h-6 text-purple-500" />
+              <span className="text-sm">Restaurant Settings</span>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Recent Orders */}
+      {recentOrders.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="w-5 h-5" />
+              Recent Orders
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {recentOrders.map((order, index) => (
+                <motion.div
+                  key={order.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: index * 0.1 }}
+                  className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
+                      <Users className="w-5 h-5 text-orange-600" />
+                    </div>
+                    <div>
+                      <p className="font-medium">{order.customerName || 'Customer'}</p>
+                      <p className="text-sm text-gray-600">
+                        {order.items?.length || 0} items • ₹{order.totalAmount || 0}
+                      </p>
+                    </div>
+                  </div>
+                  <Badge
+                    variant={
+                      order.status === 'completed' ? 'default' :
+                      order.status === 'pending' ? 'destructive' : 'secondary'
+                    }
+                  >
+                    {order.status}
+                  </Badge>
+                </motion.div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+};
 
 export default function VendorDashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('overview');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [dashboardStats, setDashboardStats] = useState<DashboardStats>({
     todayOrders: 0,
     todayRevenue: 0,
     pendingOrders: 0,
     completedOrders: 0,
     totalMenuItems: 0,
-    avgOrderValue: 0
+    avgOrderValue: 0,
+    totalRevenue: 0,
+    completionRate: 0
   });
+  const [vendorProfile, setVendorProfile] = useState<VendorProfile | null>(null);
+  const [recentOrders, setRecentOrders] = useState<any[]>([]);
 
   // Check if user is vendor
   useEffect(() => {
@@ -77,7 +318,82 @@ export default function VendorDashboard() {
       navigate('/login');
       return;
     }
+    loadVendorData();
   }, [user, navigate]);
+
+  const loadVendorData = async () => {
+    if (!user?.uid) return;
+    
+    setIsLoading(true);
+    try {
+      // Load vendor profile and stats
+      const [profile, stats] = await Promise.all([
+        getVendorProfile(user.uid),
+        getVendorStats(user.uid)
+      ]);
+
+      if (profile) {
+        setVendorProfile(profile);
+      }
+
+      // If no data found, create sample data for testing
+      if (stats.totalOrders === 0) {
+        console.log('No orders found, creating sample data...');
+        await createSampleVendorData(user.uid);
+        // Reload stats after creating sample data
+        const updatedStats = await getVendorStats(user.uid);
+        setDashboardStats(prev => ({
+          ...prev,
+          ...updatedStats
+        }));
+      } else {
+        setDashboardStats(prev => ({
+          ...prev,
+          ...stats
+        }));
+      }
+
+      // Set up real-time orders listener
+      const unsubscribe = getVendorOrdersRealtime(user.uid, (orders) => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        const todayOrders = orders.filter(order => {
+          const orderDate = new Date(order.createdAt);
+          return orderDate >= today;
+        });
+
+        const pendingOrders = orders.filter(order => 
+          ['pending', 'accepted', 'preparing'].includes(order.status)
+        );
+
+        const completedToday = todayOrders.filter(order => 
+          order.status === 'completed'
+        );
+
+        const todayRevenue = completedToday.reduce((sum, order) => 
+          sum + (order.totalAmount || 0), 0
+        );
+
+        setDashboardStats(prev => ({
+          ...prev,
+          todayOrders: todayOrders.length,
+          todayRevenue,
+          pendingOrders: pendingOrders.length,
+          completedOrders: completedToday.length
+        }));
+
+        setRecentOrders(orders.slice(0, 5));
+      });
+
+      return () => unsubscribe && unsubscribe();
+    } catch (error) {
+      console.error('Error loading vendor data:', error);
+      toast.error('Failed to load dashboard data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -88,27 +404,19 @@ export default function VendorDashboard() {
     }
   };
 
-  const renderActiveComponent = () => {
-    switch (activeTab) {
-      case 'overview':
-        return <DashboardOverview stats={dashboardStats} />;
-      case 'orders':
-        return <OrdersManagement />;
-      case 'menu':
-        return <MenuManagement />;
-      case 'analytics':
-        return <SalesAnalytics />;
-      case 'billing':
-        return <BillingTransactions />;
-      case 'settings':
-        return <VendorSettings />;
-      default:
-        return <DashboardOverview stats={dashboardStats} />;
-    }
-  };
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       {/* Mobile Sidebar Overlay */}
       <AnimatePresence>
         {sidebarOpen && (
@@ -122,283 +430,151 @@ export default function VendorDashboard() {
         )}
       </AnimatePresence>
 
-      {/* Sidebar */}
-      <motion.aside
-        initial={false}
-        animate={{ x: sidebarOpen ? 0 : '-100%' }}
-        className={cn(
-          "fixed left-0 top-0 h-full w-64 bg-white border-r border-orange-200 z-50 lg:translate-x-0 lg:static lg:z-auto",
-          "shadow-xl lg:shadow-none"
-        )}
-      >
-        <div className="flex flex-col h-full">
-          {/* Header */}
-          <div className="p-6 border-b border-orange-100">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-amber-500 rounded-xl flex items-center justify-center">
-                  <ChefHat className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h2 className="font-bold text-gray-900">Vendor Portal</h2>
-                  <p className="text-sm text-gray-600">Restaurant Dashboard</p>
-                </div>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="lg:hidden"
-                onClick={() => setSidebarOpen(false)}
-              >
-                <X className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-
-          {/* Navigation */}
-          <nav className="flex-1 p-4 space-y-2">
-            {sidebarItems.map((item) => (
-              <Button
-                key={item.id}
-                variant={activeTab === item.id ? "default" : "ghost"}
-                className={cn(
-                  "w-full justify-start gap-3 h-12",
-                  activeTab === item.id 
-                    ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg" 
-                    : "hover:bg-orange-50 text-gray-700"
-                )}
-                onClick={() => {
-                  setActiveTab(item.id);
-                  setSidebarOpen(false);
-                }}
-              >
-                <item.icon className="w-5 h-5" />
-                <span className="font-medium">{item.label}</span>
-                {item.badge && (
-                  <Badge variant="destructive" className="ml-auto text-xs animate-pulse">
-                    {item.badge}
-                  </Badge>
-                )}
-              </Button>
-            ))}
-          </nav>
-
-          {/* User Profile */}
-          <div className="p-4 border-t border-orange-100">
-            <div className="flex items-center gap-3 mb-4">
-              <Avatar className="w-10 h-10">
-                <AvatarImage src={user?.profilePicture} />
-                <AvatarFallback className="bg-orange-100 text-orange-700">
-                  {user?.name?.charAt(0) || 'V'}
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-gray-900 truncate">{user?.name || 'Vendor'}</p>
-                <p className="text-sm text-gray-600 truncate">{user?.email}</p>
-              </div>
-            </div>
+      {/* Top Navigation Bar */}
+      <header className="bg-white/95 backdrop-blur-sm border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <div className="flex items-center justify-between px-6 py-4">
+          <div className="flex items-center gap-4">
             <Button
-              variant="outline"
-              className="w-full gap-2 text-gray-700 hover:text-red-600 hover:border-red-300"
-              onClick={handleLogout}
+              variant="ghost"
+              size="sm"
+              className="lg:hidden"
+              onClick={() => setSidebarOpen(true)}
             >
-              <LogOut className="w-4 h-4" />
-              Logout
+              <Menu className="w-5 h-5" />
             </Button>
-          </div>
-        </div>
-      </motion.aside>
-
-      {/* Main Content */}
-      <div className="lg:ml-64">
-        {/* Top Header */}
-        <header className="bg-white/80 backdrop-blur-sm border-b border-orange-200 sticky top-0 z-30">
-          <div className="flex items-center justify-between px-6 py-4">
-            <div className="flex items-center gap-4">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="lg:hidden"
-                onClick={() => setSidebarOpen(true)}
-              >
-                <Menu className="w-5 h-5" />
-              </Button>
+            
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-amber-500 rounded-xl flex items-center justify-center">
+                <ChefHat className="w-6 h-6 text-white" />
+              </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900 capitalize">
-                  {activeTab === 'overview' ? 'Dashboard Overview' : sidebarItems.find(item => item.id === activeTab)?.label}
+                <h1 className="text-xl font-bold text-gray-900">
+                  {vendorProfile?.businessName || 'Vendor Dashboard'}
                 </h1>
-                <p className="text-gray-600">
+                <p className="text-sm text-gray-600">
                   {new Date().toLocaleDateString('en-US', { 
                     weekday: 'long', 
-                    year: 'numeric', 
-                    month: 'long', 
+                    month: 'short', 
                     day: 'numeric' 
                   })}
                 </p>
               </div>
             </div>
+          </div>
 
-            <div className="flex items-center gap-4">
-              <Button variant="outline" size="sm" className="gap-2">
-                <Bell className="w-4 h-4" />
-                <Badge variant="destructive" className="text-xs">3</Badge>
-              </Button>
-              <Button variant="outline" size="sm" className="gap-2">
-                <Eye className="w-4 h-4" />
-                View Live Site
+          <div className="flex items-center gap-4">
+            <Button variant="outline" size="sm" className="gap-2 hidden md:flex">
+              <Bell className="w-4 h-4" />
+              <Badge variant="destructive" className="text-xs">3</Badge>
+            </Button>
+            
+            <div className="flex items-center gap-3">
+              <Avatar className="w-8 h-8">
+                <AvatarImage src={vendorProfile?.logo} />
+                <AvatarFallback className="bg-orange-100 text-orange-700 text-sm">
+                  {vendorProfile?.businessName?.charAt(0) || 'V'}
+                </AvatarFallback>
+              </Avatar>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleLogout}
+                className="text-gray-700 hover:text-red-600"
+              >
+                <LogOut className="w-4 h-4" />
               </Button>
             </div>
           </div>
-        </header>
+        </div>
+      </header>
 
-        {/* Dashboard Content */}
-        <main className="p-6">
-          {renderActiveComponent()}
-        </main>
-      </div>
-    </div>
-  );
-}
+      {/* Main Content with Modern Tabs */}
+      <main className="p-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          {/* Modern Tab Navigation */}
+          <div className="bg-white rounded-2xl p-2 shadow-sm border border-slate-200">
+            <TabsList className="grid w-full grid-cols-2 md:grid-cols-6 bg-transparent gap-2">
+              <TabsTrigger 
+                value="overview" 
+                className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-amber-500 data-[state=active]:text-white rounded-xl font-medium transition-all duration-200"
+              >
+                <BarChart3 className="w-4 h-4 mr-2" />
+                Overview
+              </TabsTrigger>
+              <TabsTrigger 
+                value="orders"
+                className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-500 data-[state=active]:text-white rounded-xl font-medium transition-all duration-200"
+              >
+                <ShoppingBag className="w-4 h-4 mr-2" />
+                Orders
+                {dashboardStats.pendingOrders > 0 && (
+                  <Badge variant="destructive" className="ml-2 text-xs">
+                    {dashboardStats.pendingOrders}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger 
+                value="menu"
+                className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500 data-[state=active]:to-emerald-500 data-[state=active]:text-white rounded-xl font-medium transition-all duration-200"
+              >
+                <ChefHat className="w-4 h-4 mr-2" />
+                Menu
+              </TabsTrigger>
+              <TabsTrigger 
+                value="analytics"
+                className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-violet-500 data-[state=active]:text-white rounded-xl font-medium transition-all duration-200"
+              >
+                <TrendingUp className="w-4 h-4 mr-2" />
+                Analytics
+              </TabsTrigger>
+              <TabsTrigger 
+                value="billing"
+                className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-pink-500 data-[state=active]:to-rose-500 data-[state=active]:text-white rounded-xl font-medium transition-all duration-200"
+              >
+                <CreditCard className="w-4 h-4 mr-2" />
+                Billing
+              </TabsTrigger>
+              <TabsTrigger 
+                value="settings"
+                className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-gray-500 data-[state=active]:to-slate-500 data-[state=active]:text-white rounded-xl font-medium transition-all duration-200"
+              >
+                <Settings className="w-4 h-4 mr-2" />
+                Settings
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
-// Dashboard Overview Component
-function DashboardOverview({ stats }: { stats: DashboardStats }) {
-  return (
-    <div className="space-y-6">
-      {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-        >
-          <Card className="border-0 shadow-lg bg-gradient-to-br from-blue-500 to-blue-600 text-white">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-blue-100 text-sm font-medium">Today's Orders</p>
-                  <p className="text-3xl font-bold">{stats.todayOrders}</p>
-                </div>
-                <ShoppingBag className="w-8 h-8 text-blue-200" />
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+          {/* Tab Content */}
+          <TabsContent value="overview" className="space-y-6">
+            <DashboardOverview 
+              stats={dashboardStats} 
+              recentOrders={recentOrders}
+              vendorProfile={vendorProfile}
+              onTabChange={setActiveTab}
+            />
+          </TabsContent>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-        >
-          <Card className="border-0 shadow-lg bg-gradient-to-br from-green-500 to-green-600 text-white">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-green-100 text-sm font-medium">Today's Revenue</p>
-                  <p className="text-3xl font-bold">₹{stats.todayRevenue}</p>
-                </div>
-                <DollarSign className="w-8 h-8 text-green-200" />
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+          <TabsContent value="orders">
+            <OrdersManagement />
+          </TabsContent>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-        >
-          <Card className="border-0 shadow-lg bg-gradient-to-br from-orange-500 to-orange-600 text-white">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-orange-100 text-sm font-medium">Pending Orders</p>
-                  <p className="text-3xl font-bold">{stats.pendingOrders}</p>
-                </div>
-                <Clock className="w-8 h-8 text-orange-200" />
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+          <TabsContent value="menu">
+            <MenuManagement />
+          </TabsContent>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-        >
-          <Card className="border-0 shadow-lg bg-gradient-to-br from-purple-500 to-purple-600 text-white">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-purple-100 text-sm font-medium">Menu Items</p>
-                  <p className="text-3xl font-bold">{stats.totalMenuItems}</p>
-                </div>
-                <Package className="w-8 h-8 text-purple-200" />
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-      </div>
+          <TabsContent value="analytics">
+            <SalesAnalytics />
+          </TabsContent>
 
-      {/* Recent Orders & Quick Actions */}
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* Recent Orders */}
-        <Card className="lg:col-span-2 border-0 shadow-lg">
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <span>Recent Orders</span>
-              <Button variant="outline" size="sm">View All</Button>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {[1, 2, 3].map((order) => (
-                <div key={order} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
-                      <span className="text-orange-600 font-bold">#{order}</span>
-                    </div>
-                    <div>
-                      <p className="font-medium">Order #00{order}</p>
-                      <p className="text-sm text-gray-600">Customer Name • 2 items</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-bold">₹{250 + order * 50}</p>
-                    <Badge variant={order === 1 ? "default" : "secondary"} className="text-xs">
-                      {order === 1 ? "Pending" : "Completed"}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+          <TabsContent value="billing">
+            <BillingTransactions />
+          </TabsContent>
 
-        {/* Quick Actions */}
-        <Card className="border-0 shadow-lg">
-          <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Button className="w-full gap-2 bg-gradient-to-r from-orange-500 to-amber-500">
-              <Plus className="w-4 h-4" />
-              Add New Menu Item
-            </Button>
-            <Button variant="outline" className="w-full gap-2">
-              <BarChart3 className="w-4 h-4" />
-              View Analytics
-            </Button>
-            <Button variant="outline" className="w-full gap-2">
-              <Download className="w-4 h-4" />
-              Download Report
-            </Button>
-            <Button variant="outline" className="w-full gap-2">
-              <Settings className="w-4 h-4" />
-              Restaurant Settings
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+          <TabsContent value="settings">
+            <VendorSettings />
+          </TabsContent>
+        </Tabs>
+      </main>
     </div>
   );
 }
