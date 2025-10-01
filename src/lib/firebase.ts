@@ -3156,3 +3156,4 @@ export async function updateVendorNotificationSettings(vendorId: string, setting
     throw error;
   }
 }
+

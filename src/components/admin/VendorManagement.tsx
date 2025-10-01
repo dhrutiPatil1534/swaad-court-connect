@@ -37,7 +37,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import {
-  getAllVendorsForAdmin,
+  getAllRestaurantsForAdmin,
   approveVendorById,
   rejectVendorById,
   suspendVendorById,
@@ -46,31 +46,26 @@ import {
 
 interface Vendor {
   id: string;
-  businessName: string;
-  email: string;
+  name: string;
+  email?: string;
   phone?: string;
   address?: string;
   cuisine: string[];
   logo?: string;
-  status: 'pending' | 'approved' | 'rejected' | 'suspended' | 'active';
-  commissionRate: number;
-  createdAt: Date;
-  approvedAt?: Date;
-  rejectedAt?: Date;
-  suspendedAt?: Date;
-  stats: {
+  status: 'active' | 'inactive' | 'suspended';
+  rating: number;
+  deliveryTime: string;
+  distance: string;
+  isOpen: boolean;
+  menuItemsCount: number;
+  flaggedItemsCount: number;
+  averagePrice: number;
+  stats?: {
     totalOrders: number;
     totalRevenue: number;
     averageRating: number;
     completionRate: number;
   };
-  documents?: {
-    businessLicense?: string;
-    foodLicense?: string;
-    gstCertificate?: string;
-  };
-  rejectionReason?: string;
-  suspensionReason?: string;
 }
 
 export default function VendorManagement() {
@@ -99,11 +94,11 @@ export default function VendorManagement() {
   const loadVendors = async () => {
     setIsLoading(true);
     try {
-      const vendorsData = await getAllVendorsForAdmin();
-      setVendors(vendorsData);
+      const restaurantsData = await getAllRestaurantsForAdmin();
+      setVendors(restaurantsData);
     } catch (error) {
-      console.error('Error loading vendors:', error);
-      toast.error('Failed to load vendors');
+      console.error('Error loading restaurants:', error);
+      toast.error('Failed to load restaurants');
     } finally {
       setIsLoading(false);
     }
@@ -118,8 +113,8 @@ export default function VendorManagement() {
 
     if (searchQuery) {
       filtered = filtered.filter(vendor =>
-        vendor.businessName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        vendor.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        vendor.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (vendor.email && vendor.email.toLowerCase().includes(searchQuery.toLowerCase())) ||
         vendor.cuisine.some(c => c.toLowerCase().includes(searchQuery.toLowerCase()))
       );
     }
@@ -216,13 +211,12 @@ export default function VendorManagement() {
 
   const getStatusBadge = (status: string) => {
     const variants = {
-      pending: { variant: 'secondary' as const, color: 'text-yellow-700 bg-yellow-100' },
-      approved: { variant: 'default' as const, color: 'text-green-700 bg-green-100' },
-      rejected: { variant: 'destructive' as const, color: 'text-red-700 bg-red-100' },
+      active: { variant: 'default' as const, color: 'text-green-700 bg-green-100' },
+      inactive: { variant: 'secondary' as const, color: 'text-gray-700 bg-gray-100' },
       suspended: { variant: 'destructive' as const, color: 'text-orange-700 bg-orange-100' }
     };
 
-    const config = variants[status as keyof typeof variants] || variants.pending;
+    const config = variants[status as keyof typeof variants] || variants.active;
     
     return (
       <Badge variant={config.variant} className={`text-xs ${config.color}`}>
@@ -233,26 +227,24 @@ export default function VendorManagement() {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'pending':
-        return <Clock className="w-4 h-4 text-yellow-500" />;
-      case 'approved':
+      case 'active':
         return <CheckCircle className="w-4 h-4 text-green-500" />;
-      case 'rejected':
-        return <XCircle className="w-4 h-4 text-red-500" />;
+      case 'inactive':
+        return <Pause className="w-4 h-4 text-gray-500" />;
       case 'suspended':
         return <Ban className="w-4 h-4 text-orange-500" />;
       default:
-        return <Clock className="w-4 h-4 text-gray-500" />;
+        return <CheckCircle className="w-4 h-4 text-green-500" />;
     }
   };
 
   const getVendorStats = () => {
     return {
       total: vendors.length,
-      pending: vendors.filter(v => v.status === 'pending').length,
-      approved: vendors.filter(v => v.status === 'approved').length,
+      active: vendors.filter(v => v.status === 'active').length,
+      inactive: vendors.filter(v => v.status === 'inactive').length,
       suspended: vendors.filter(v => v.status === 'suspended').length,
-      rejected: vendors.filter(v => v.status === 'rejected').length
+      open: vendors.filter(v => v.isOpen).length
     };
   };
 
@@ -271,8 +263,8 @@ export default function VendorManagement() {
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Vendor Management</h2>
-          <p className="text-gray-600">Manage vendor applications and accounts</p>
+          <h2 className="text-2xl font-bold text-gray-900">Restaurant Management</h2>
+          <p className="text-gray-600">Manage restaurant listings and status</p>
         </div>
         
         <div className="flex gap-3">
@@ -292,21 +284,28 @@ export default function VendorManagement() {
         <Card className="border-0 shadow-lg">
           <CardContent className="p-4 text-center">
             <div className="text-2xl font-bold text-gray-900">{stats.total}</div>
-            <div className="text-sm text-gray-600">Total Vendors</div>
+            <div className="text-sm text-gray-600">Total Restaurants</div>
           </CardContent>
         </Card>
 
         <Card className="border-0 shadow-lg">
           <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-yellow-600">{stats.pending}</div>
-            <div className="text-sm text-gray-600">Pending</div>
+            <div className="text-2xl font-bold text-green-600">{stats.active}</div>
+            <div className="text-sm text-gray-600">Active</div>
           </CardContent>
         </Card>
 
         <Card className="border-0 shadow-lg">
           <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-green-600">{stats.approved}</div>
-            <div className="text-sm text-gray-600">Approved</div>
+            <div className="text-2xl font-bold text-blue-600">{stats.open}</div>
+            <div className="text-sm text-gray-600">Currently Open</div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-0 shadow-lg">
+          <CardContent className="p-4 text-center">
+            <div className="text-2xl font-bold text-gray-600">{stats.inactive}</div>
+            <div className="text-sm text-gray-600">Inactive</div>
           </CardContent>
         </Card>
 
@@ -314,13 +313,6 @@ export default function VendorManagement() {
           <CardContent className="p-4 text-center">
             <div className="text-2xl font-bold text-orange-600">{stats.suspended}</div>
             <div className="text-sm text-gray-600">Suspended</div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-0 shadow-lg">
-          <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-red-600">{stats.rejected}</div>
-            <div className="text-sm text-gray-600">Rejected</div>
           </CardContent>
         </Card>
       </div>
@@ -331,7 +323,7 @@ export default function VendorManagement() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <Input
-              placeholder="Search vendors by name, email, or cuisine..."
+              placeholder="Search restaurants by name, email, or cuisine..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10"
@@ -344,11 +336,10 @@ export default function VendorManagement() {
             <SelectValue placeholder="Filter by status" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Vendors</SelectItem>
-            <SelectItem value="pending">Pending Approval</SelectItem>
-            <SelectItem value="approved">Approved</SelectItem>
+            <SelectItem value="all">All Restaurants</SelectItem>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="inactive">Inactive</SelectItem>
             <SelectItem value="suspended">Suspended</SelectItem>
-            <SelectItem value="rejected">Rejected</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -374,12 +365,12 @@ export default function VendorManagement() {
                           <Avatar className="w-16 h-16">
                             <AvatarImage src={vendor.logo} />
                             <AvatarFallback className="bg-orange-100 text-orange-600 text-lg font-semibold">
-                              {vendor.businessName.charAt(0)}
+                              {vendor.name.charAt(0)}
                             </AvatarFallback>
                           </Avatar>
                           
                           <div>
-                            <h3 className="text-xl font-semibold text-gray-900">{vendor.businessName}</h3>
+                            <h3 className="text-xl font-semibold text-gray-900">{vendor.name}</h3>
                             <div className="flex items-center gap-2 mt-1">
                               {getStatusIcon(vendor.status)}
                               {getStatusBadge(vendor.status)}
@@ -396,10 +387,12 @@ export default function VendorManagement() {
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                        <div className="flex items-center gap-2 text-sm text-gray-600">
-                          <Mail className="w-4 h-4" />
-                          {vendor.email}
-                        </div>
+                        {vendor.email && (
+                          <div className="flex items-center gap-2 text-sm text-gray-600">
+                            <Mail className="w-4 h-4" />
+                            {vendor.email}
+                          </div>
+                        )}
                         {vendor.phone && (
                           <div className="flex items-center gap-2 text-sm text-gray-600">
                             <Phone className="w-4 h-4" />
@@ -414,55 +407,43 @@ export default function VendorManagement() {
                         )}
                         <div className="flex items-center gap-2 text-sm text-gray-600">
                           <DollarSign className="w-4 h-4" />
-                          Commission: {vendor.commissionRate}%
+                          Avg Price: ₹{vendor.averagePrice}
                         </div>
                       </div>
 
-                      {/* Performance Stats */}
-                      {vendor.status === 'approved' && (
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
-                          <div className="text-center">
-                            <div className="text-lg font-semibold text-gray-900">{vendor.stats.totalOrders}</div>
-                            <div className="text-xs text-gray-600">Orders</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="text-lg font-semibold text-gray-900">₹{vendor.stats.totalRevenue.toLocaleString()}</div>
-                            <div className="text-xs text-gray-600">Revenue</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="text-lg font-semibold text-gray-900 flex items-center justify-center gap-1">
-                              <Star className="w-4 h-4 text-yellow-500" />
-                              {vendor.stats.averageRating}
-                            </div>
-                            <div className="text-xs text-gray-600">Rating</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="text-lg font-semibold text-gray-900">{vendor.stats.completionRate}%</div>
-                            <div className="text-xs text-gray-600">Completion</div>
-                          </div>
+                      {/* Restaurant Stats */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
+                        <div className="text-center">
+                          <div className="text-lg font-semibold text-gray-900">{vendor.menuItemsCount}</div>
+                          <div className="text-xs text-gray-600">Menu Items</div>
                         </div>
-                      )}
+                        <div className="text-center">
+                          <div className="text-lg font-semibold text-gray-900">{vendor.flaggedItemsCount}</div>
+                          <div className="text-xs text-gray-600">Flagged Items</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-lg font-semibold text-gray-900 flex items-center justify-center gap-1">
+                            <Star className="w-4 h-4 text-yellow-500" />
+                            {vendor.rating}
+                          </div>
+                          <div className="text-xs text-gray-600">Rating</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-lg font-semibold text-gray-900">{vendor.deliveryTime}</div>
+                          <div className="text-xs text-gray-600">Delivery Time</div>
+                        </div>
+                      </div>
 
-                      {/* Status-specific messages */}
-                      {vendor.rejectionReason && (
-                        <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                          <div className="flex items-center gap-2 mb-1">
-                            <AlertTriangle className="w-4 h-4 text-red-500" />
-                            <span className="text-sm font-medium text-red-700">Rejection Reason</span>
-                          </div>
-                          <p className="text-sm text-red-600">{vendor.rejectionReason}</p>
+                      {/* Restaurant Status */}
+                      <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Store className="w-4 h-4 text-blue-500" />
+                          <span className="text-sm font-medium text-blue-700">Restaurant Status</span>
                         </div>
-                      )}
-
-                      {vendor.suspensionReason && (
-                        <div className="mt-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Ban className="w-4 h-4 text-orange-500" />
-                            <span className="text-sm font-medium text-orange-700">Suspension Reason</span>
-                          </div>
-                          <p className="text-sm text-orange-600">{vendor.suspensionReason}</p>
-                        </div>
-                      )}
+                        <p className="text-sm text-blue-600">
+                          {vendor.isOpen ? 'Currently Open' : 'Currently Closed'} • {vendor.distance}
+                        </p>
+                      </div>
                     </div>
 
                     {/* Actions */}

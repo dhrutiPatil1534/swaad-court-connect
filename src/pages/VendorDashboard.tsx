@@ -34,8 +34,7 @@ import {
   getVendorProfile,
   getVendorStats,
   getVendorAnalytics,
-  updateOrderStatus,
-  createSampleVendorData
+  updateOrderStatus
 } from '@/lib/firebase';
 
 // Import dashboard components
@@ -336,22 +335,11 @@ export default function VendorDashboard() {
         setVendorProfile(profile);
       }
 
-      // If no data found, create sample data for testing
-      if (stats.totalOrders === 0) {
-        console.log('No orders found, creating sample data...');
-        await createSampleVendorData(user.uid);
-        // Reload stats after creating sample data
-        const updatedStats = await getVendorStats(user.uid);
-        setDashboardStats(prev => ({
-          ...prev,
-          ...updatedStats
-        }));
-      } else {
-        setDashboardStats(prev => ({
-          ...prev,
-          ...stats
-        }));
-      }
+      // Set dashboard stats
+      setDashboardStats(prev => ({
+        ...prev,
+        ...stats
+      }));
 
       // Set up real-time orders listener
       const unsubscribe = getVendorOrdersRealtime(user.uid, (orders) => {

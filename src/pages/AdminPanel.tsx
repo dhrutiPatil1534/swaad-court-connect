@@ -25,7 +25,8 @@ import {
   XCircle,
   Clock,
   Menu,
-  X
+  X,
+  LogOut
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -49,7 +50,7 @@ import AdminSettings from '@/components/admin/AdminSettings';
 type AdminSection = 'dashboard' | 'vendors' | 'restaurants' | 'orders' | 'payments' | 'users' | 'analytics' | 'notifications' | 'settings';
 
 export default function AdminPanel() {
-  const { user, isLoading: authLoading } = useAuth();
+  const { user, isLoading: authLoading, logout } = useAuth();
   const [activeSection, setActiveSection] = useState<AdminSection>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [dashboardLoading, setDashboardLoading] = useState(false);
@@ -88,6 +89,16 @@ export default function AdminPanel() {
       toast.error('Failed to load dashboard statistics');
     } finally {
       setDashboardLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      toast.success('Logged out successfully');
+    } catch (error) {
+      console.error('Error logging out:', error);
+      toast.error('Failed to logout');
     }
   };
 
@@ -422,6 +433,11 @@ export default function AdminPanel() {
             <Button variant="ghost" size="sm" className="relative">
               <Bell className="w-5 h-5" />
               <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full text-xs"></span>
+            </Button>
+            
+            <Button variant="ghost" size="sm" onClick={handleLogout} className="gap-2">
+              <LogOut className="w-4 h-4" />
+              <span className="hidden md:inline">Logout</span>
             </Button>
             
             <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center">
