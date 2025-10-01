@@ -16,7 +16,8 @@ import {
   Download,
   RefreshCw,
   UserCheck,
-  UserX
+  UserX,
+  Key
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,7 +28,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
-import { getAllCustomersForAdmin, updateCustomerStatus } from '@/lib/firebase';
+import { getAllCustomersForAdmin, updateCustomerStatus, sendCustomerPasswordReset } from '@/lib/firebase';
 
 interface User {
   id: string;

@@ -28,7 +28,8 @@ import {
   RecaptchaVerifier,
   ConfirmationResult,
   User as FirebaseUser,
-  updateProfile
+  updateProfile,
+  sendPasswordResetEmail
 } from 'firebase/auth';
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 
@@ -3686,6 +3687,178 @@ export async function updateCustomerStatus(userId: string, status: 'active' | 's
     
   } catch (error) {
     console.error('Error updating customer status:', error);
+    throw error;
+  }
+}
+
+// ============================================================================
+// SECURE PASSWORD RESET FUNCTIONS
+// ============================================================================
+
+/**
+ * Send password reset email to a vendor
+ * This is the SECURE way to handle forgotten passwords
+ */
+export async function sendVendorPasswordReset(email: string) {
+  try {
+    console.log('sendVendorPasswordReset: Sending password reset email to:', email);
+    
+    // First verify the email belongs to a vendor
+    const vendorQuery = query(
+      collection(db, 'users'),
+      where('email', '==', email),
+      where('role', '==', 'vendor')
+    );
+    
+    const vendorSnapshot = await getDocs(vendorQuery);
+    
+    if (vendorSnapshot.empty) {
+      throw new Error('No vendor account found with this email address');
+    }
+    
+    // Send password reset email using Firebase Auth
+    await sendPasswordResetEmail(auth, email);
+    
+    // Log the password reset request for admin tracking
+    await addDoc(collection(db, 'passwordResetLogs'), {
+      email: email,
+      userType: 'vendor',
+      requestedAt: new Date(),
+      requestedBy: 'admin',
+      status: 'sent'
+    });
+    
+    console.log('sendVendorPasswordReset: Password reset email sent successfully');
+    return {
+      success: true,
+      message: 'Password reset email sent successfully'
+    };
+    
+  } catch (error) {
+    console.error('Error sending vendor password reset:', error);
+    throw error;
+  }
+}
+
+/**
+ * Send password reset email to a customer
+ */
+export async function sendCustomerPasswordReset(email: string) {
+  try {
+    console.log('sendCustomerPasswordReset: Sending password reset email to:', email);
+    
+    // First verify the email belongs to a customer
+    const customerQuery = query(
+      collection(db, 'users'),
+      where('email', '==', email),
+      where('role', '==', 'customer')
+    );
+    
+    const customerSnapshot = await getDocs(customerQuery);
+    
+    if (customerSnapshot.empty) {
+      throw new Error('No customer account found with this email address');
+    }
+    
+    // Send password reset email using Firebase Auth
+    await sendPasswordResetEmail(auth, email);
+    
+    // Log the password reset request for admin tracking
+    await addDoc(collection(db, 'passwordResetLogs'), {
+      email: email,
+      userType: 'customer',
+      requestedAt: new Date(),
+      requestedBy: 'admin',
+      status: 'sent'
+    });
+    
+    console.log('sendCustomerPasswordReset: Password reset email sent successfully');
+    return {
+      success: true,
+      message: 'Password reset email sent successfully'
+    };
+    
+  } catch (error) {
+    console.error('Error sending customer password reset:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get all password reset logs for admin monitoring
+ */
+export async function getPasswordResetLogs() {
+  try {
+    console.log('getPasswordResetLogs: Fetching password reset logs');
+    
+    const logsQuery = query(
+      collection(db, 'passwordResetLogs'),
+      orderBy('requestedAt', 'desc'),
+      limit(100) // Get last 100 reset requests
+    );
+    
+    const logsSnapshot = await getDocs(logsQuery);
+    const logs = [];
+    
+    for (const docSnapshot of logsSnapshot.docs) {
+      const logData = docSnapshot.data();
+      logs.push({
+        id: docSnapshot.id,
+        email: logData.email,
+        userType: logData.userType,
+        requestedAt: logData.requestedAt?.toDate() || new Date(),
+        requestedBy: logData.requestedBy || 'unknown',
+        status: logData.status || 'unknown'
+      });
+    }
+    
+    console.log('getPasswordResetLogs: Retrieved', logs.length, 'password reset logs');
+    return logs;
+    
+  } catch (error) {
+    console.error('Error fetching password reset logs:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get vendor information for password reset (without password)
+ * Returns safe vendor data that can be displayed to admin
+ */
+export async function getVendorInfoForPasswordReset(email: string) {
+  try {
+    console.log('getVendorInfoForPasswordReset: Getting vendor info for:', email);
+    
+    const vendorQuery = query(
+      collection(db, 'users'),
+      where('email', '==', email),
+      where('role', '==', 'vendor')
+    );
+    
+    const vendorSnapshot = await getDocs(vendorQuery);
+    
+    if (vendorSnapshot.empty) {
+      return null;
+    }
+    
+    const vendorDoc = vendorSnapshot.docs[0];
+    const vendorData = vendorDoc.data();
+    
+    // Return only safe, non-sensitive information
+    return {
+      id: vendorDoc.id,
+      name: vendorData.name || 'Unknown',
+      email: vendorData.email,
+      businessName: vendorData.businessName || 'Unknown Business',
+      phone: vendorData.phone || 'Not provided',
+      status: vendorData.status || 'unknown',
+      joinedAt: vendorData.createdAt?.toDate() || new Date(),
+      lastLogin: vendorData.lastLogin?.toDate() || null,
+      // NEVER include password or sensitive data
+    };
+    
+  } catch (error) {
+    console.error('Error getting vendor info for password reset:', error);
     throw error;
   }
 }

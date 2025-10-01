@@ -22,7 +22,8 @@ import {
   AlertTriangle,
   Ban,
   Play,
-  Pause
+  Pause,
+  Key
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -41,7 +42,9 @@ import {
   approveVendorById,
   rejectVendorById,
   suspendVendorById,
-  activateVendorById
+  activateVendorById,
+  sendVendorPasswordReset,
+  getVendorInfoForPasswordReset
 } from '@/lib/firebase';
 
 interface Vendor {
@@ -82,6 +85,8 @@ export default function VendorManagement() {
   const [rejectionReason, setRejectionReason] = useState('');
   const [suspensionReason, setSuspensionReason] = useState('');
   const [commissionRate, setCommissionRate] = useState(10);
+  const [showPasswordResetDialog, setShowPasswordResetDialog] = useState(false);
+  const [passwordResetEmail, setPasswordResetEmail] = useState('');
 
   useEffect(() => {
     loadVendors();
@@ -204,6 +209,37 @@ export default function VendorManagement() {
     } catch (error) {
       console.error('Error activating vendor:', error);
       toast.error('Failed to activate vendor');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handlePasswordReset = async () => {
+    if (!passwordResetEmail.trim()) {
+      toast.error('Please enter vendor email address');
+      return;
+    }
+
+    setActionLoading('password-reset');
+    try {
+      // First verify the vendor exists
+      const vendorInfo = await getVendorInfoForPasswordReset(passwordResetEmail);
+      
+      if (!vendorInfo) {
+        toast.error('No vendor found with this email address');
+        return;
+      }
+
+      // Send password reset email
+      await sendVendorPasswordReset(passwordResetEmail);
+      
+      toast.success(`Password reset email sent to ${passwordResetEmail}`);
+      setShowPasswordResetDialog(false);
+      setPasswordResetEmail('');
+      
+    } catch (error) {
+      console.error('Error sending password reset:', error);
+      toast.error('Failed to send password reset email');
     } finally {
       setActionLoading(null);
     }
@@ -456,6 +492,75 @@ export default function VendorManagement() {
                         <Eye className="w-4 h-4" />
                         View Details
                       </Button>
+
+                      {/* Password Reset Button - Available for all vendors */}
+                      <Dialog open={showPasswordResetDialog && selectedVendor?.id === vendor.id} onOpenChange={setShowPasswordResetDialog}>
+                        <DialogTrigger asChild>
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedVendor(vendor);
+                              setPasswordResetEmail(vendor.email || '');
+                            }}
+                            className="gap-2 text-orange-600 border-orange-200 hover:bg-orange-50"
+                            disabled={actionLoading === 'password-reset'}
+                          >
+                            <Key className="w-4 h-4" />
+                            Reset Password
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>Send Password Reset Email</DialogTitle>
+                          </DialogHeader>
+                          <div className="space-y-4">
+                            <div className="p-4 bg-blue-50 rounded-lg">
+                              <div className="flex items-start gap-3">
+                                <Key className="w-5 h-5 text-blue-600 mt-0.5" />
+                                <div>
+                                  <h4 className="font-medium text-blue-900">Secure Password Reset</h4>
+                                  <p className="text-sm text-blue-700 mt-1">
+                                    This will send a secure password reset link to the vendor's email. 
+                                    They can use this link to create a new password safely.
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <div>
+                              <Label htmlFor="resetEmail">Vendor Email Address</Label>
+                              <Input
+                                id="resetEmail"
+                                type="email"
+                                value={passwordResetEmail}
+                                onChange={(e) => setPasswordResetEmail(e.target.value)}
+                                placeholder="Enter vendor email address"
+                                className="mt-1"
+                              />
+                            </div>
+                            
+                            <div className="flex gap-3">
+                              <Button
+                                onClick={handlePasswordReset}
+                                disabled={actionLoading === 'password-reset' || !passwordResetEmail.trim()}
+                                className="flex-1 bg-orange-600 hover:bg-orange-700"
+                              >
+                                {actionLoading === 'password-reset' ? 'Sending...' : 'Send Reset Email'}
+                              </Button>
+                              <Button
+                                variant="outline"
+                                onClick={() => {
+                                  setShowPasswordResetDialog(false);
+                                  setPasswordResetEmail('');
+                                }}
+                                className="flex-1"
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
 
                       {vendor.status === 'pending' && (
                         <>

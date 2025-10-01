@@ -26,7 +26,8 @@ import {
   Clock,
   Menu,
   X,
-  LogOut
+  LogOut,
+  Key
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -47,8 +48,9 @@ import UserManagement from '@/components/admin/UserManagement';
 import AnalyticsReports from '@/components/admin/AnalyticsReports';
 import NotificationsCommunication from '@/components/admin/NotificationsCommunication';
 import AdminSettings from '@/components/admin/AdminSettings';
+import PasswordResetManager from '@/components/admin/PasswordResetManager';
 
-type AdminSection = 'dashboard' | 'vendors' | 'restaurants' | 'orders' | 'payments' | 'users' | 'analytics' | 'notifications' | 'settings';
+type AdminSection = 'dashboard' | 'vendors' | 'restaurants' | 'orders' | 'payments' | 'users' | 'analytics' | 'notifications' | 'settings' | 'password-reset';
 
 export default function AdminPanel() {
   const { user, isLoading: authLoading, logout } = useAuth();
@@ -131,6 +133,7 @@ export default function AdminPanel() {
     { id: 'users', label: 'User Management', icon: Users },
     { id: 'analytics', label: 'Analytics & Reports', icon: TrendingUp },
     { id: 'notifications', label: 'Communications', icon: Bell },
+    { id: 'password-reset', label: 'Password Reset', icon: Key },
     { id: 'settings', label: 'Admin Settings', icon: Settings }
   ];
 
@@ -349,6 +352,8 @@ export default function AdminPanel() {
         return <AnalyticsReports />;
       case 'notifications':
         return <NotificationsCommunication />;
+      case 'password-reset':
+        return <PasswordResetManager />;
       case 'settings':
         return <AdminSettings />;
       default:
