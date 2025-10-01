@@ -27,6 +27,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
+import { getAllOrdersForAdmin } from '@/lib/firebase';
 
 interface OrderItem {
   id: string;
@@ -82,81 +83,20 @@ export default function OrdersManagement() {
   const loadOrders = async () => {
     setIsLoading(true);
     try {
-      // Mock data - replace with Firebase queries
-      const mockOrders: Order[] = [
-        {
-          id: '1',
-          orderNumber: 'ORD-2024-001',
-          customerId: 'cust1',
-          customerName: 'John Doe',
-          customerPhone: '+91 9876543210',
-          customerEmail: 'john@example.com',
-          restaurantId: 'rest1',
-          restaurantName: 'Pizza Palace',
-          items: [
-            { id: '1', name: 'Margherita Pizza', quantity: 2, price: 350, isVeg: true },
-            { id: '2', name: 'Garlic Bread', quantity: 1, price: 150, isVeg: true }
-          ],
-          totalAmount: 850,
-          status: 'preparing',
-          paymentStatus: 'completed',
-          paymentMethod: 'upi',
-          orderType: 'dine-in',
-          createdAt: new Date(Date.now() - 30 * 60 * 1000),
-          updatedAt: new Date(Date.now() - 15 * 60 * 1000),
-          estimatedTime: 25,
-          tableNumber: 'T-05',
-          notes: 'Extra cheese on pizza'
-        },
-        {
-          id: '2',
-          orderNumber: 'ORD-2024-002',
-          customerId: 'cust2',
-          customerName: 'Jane Smith',
-          customerPhone: '+91 8765432109',
-          customerEmail: 'jane@example.com',
-          restaurantId: 'rest2',
-          restaurantName: 'Spice Garden',
-          items: [
-            { id: '3', name: 'Butter Chicken', quantity: 1, price: 320, isVeg: false },
-            { id: '4', name: 'Naan', quantity: 2, price: 60, isVeg: true }
-          ],
-          totalAmount: 440,
-          status: 'cancelled',
-          paymentStatus: 'refunded',
-          paymentMethod: 'card',
-          orderType: 'takeaway',
-          createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
-          updatedAt: new Date(Date.now() - 1 * 60 * 60 * 1000),
-          refundReason: 'Customer requested cancellation'
-        },
-        {
-          id: '3',
-          orderNumber: 'ORD-2024-003',
-          customerId: 'cust3',
-          customerName: 'Mike Johnson',
-          customerPhone: '+91 7654321098',
-          customerEmail: 'mike@example.com',
-          restaurantId: 'rest1',
-          restaurantName: 'Pizza Palace',
-          items: [
-            { id: '5', name: 'Pepperoni Pizza', quantity: 1, price: 420, isVeg: false }
-          ],
-          totalAmount: 420,
-          status: 'ready',
-          paymentStatus: 'completed',
-          paymentMethod: 'cash',
-          orderType: 'delivery',
-          createdAt: new Date(Date.now() - 45 * 60 * 1000),
-          updatedAt: new Date(Date.now() - 5 * 60 * 1000),
-          deliveryAddress: '123 Main St, City Center'
-        }
-      ];
-
-      setOrders(mockOrders);
+      console.log('OrdersManagement: Loading orders from Firebase...');
+      const ordersData = await getAllOrdersForAdmin();
+      console.log('OrdersManagement: Loaded', ordersData.length, 'orders');
+      setOrders(ordersData);
+      
+      if (ordersData.length === 0) {
+        toast.info('No orders found in the system');
+      } else {
+        toast.success(`Loaded ${ordersData.length} orders successfully`);
+      }
     } catch (error) {
       console.error('Error loading orders:', error);
-      toast.error('Failed to load orders');
+      toast.error('Failed to load orders from Firebase');
+      setOrders([]); // Set empty array on error
     } finally {
       setIsLoading(false);
     }

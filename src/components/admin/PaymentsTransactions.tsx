@@ -25,6 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
+import { getAllTransactionsForAdmin, getAllPayoutRequestsForAdmin } from '@/lib/firebase';
 
 interface Transaction {
   id: string;
@@ -87,65 +88,30 @@ export default function PaymentsTransactions() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      // Mock data
-      const mockTransactions: Transaction[] = [
-        {
-          id: '1',
-          orderId: 'ord1',
-          orderNumber: 'ORD-2024-001',
-          type: 'payment',
-          amount: 850,
-          status: 'completed',
-          paymentMethod: 'upi',
-          customerId: 'cust1',
-          customerName: 'John Doe',
-          restaurantId: 'rest1',
-          restaurantName: 'Pizza Palace',
-          createdAt: new Date(Date.now() - 30 * 60 * 1000),
-          completedAt: new Date(Date.now() - 25 * 60 * 1000),
-          transactionId: 'TXN123456789',
-          commission: 85,
-          platformFee: 25
-        },
-        {
-          id: '2',
-          orderId: 'ord2',
-          orderNumber: 'ORD-2024-002',
-          type: 'refund',
-          amount: 440,
-          status: 'completed',
-          paymentMethod: 'card',
-          customerId: 'cust2',
-          customerName: 'Jane Smith',
-          restaurantId: 'rest2',
-          restaurantName: 'Spice Garden',
-          createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
-          completedAt: new Date(Date.now() - 1 * 60 * 60 * 1000),
-          transactionId: 'TXN987654321'
-        }
-      ];
-
-      const mockPayouts: PayoutRequest[] = [
-        {
-          id: '1',
-          restaurantId: 'rest1',
-          restaurantName: 'Pizza Palace',
-          amount: 15000,
-          status: 'pending',
-          requestedAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
-          bankDetails: {
-            accountNumber: '****1234',
-            ifscCode: 'HDFC0001234',
-            accountHolderName: 'Pizza Palace Pvt Ltd'
-          }
-        }
-      ];
-
-      setTransactions(mockTransactions);
-      setPayoutRequests(mockPayouts);
+      console.log('PaymentsTransactions: Loading data from Firebase...');
+      
+      // Load transactions and payout requests in parallel
+      const [transactionsData, payoutRequestsData] = await Promise.all([
+        getAllTransactionsForAdmin(),
+        getAllPayoutRequestsForAdmin()
+      ]);
+      
+      console.log('PaymentsTransactions: Loaded', transactionsData.length, 'transactions');
+      console.log('PaymentsTransactions: Loaded', payoutRequestsData.length, 'payout requests');
+      
+      setTransactions(transactionsData);
+      setPayoutRequests(payoutRequestsData);
+      
+      if (transactionsData.length === 0 && payoutRequestsData.length === 0) {
+        toast.info('No payment data found in the system');
+      } else {
+        toast.success(`Loaded ${transactionsData.length} transactions and ${payoutRequestsData.length} payout requests`);
+      }
     } catch (error) {
-      console.error('Error loading data:', error);
-      toast.error('Failed to load payment data');
+      console.error('Error loading payment data:', error);
+      toast.error('Failed to load payment data from Firebase');
+      setTransactions([]);
+      setPayoutRequests([]);
     } finally {
       setIsLoading(false);
     }
@@ -466,6 +432,16 @@ export default function PaymentsTransactions() {
               </motion.div>
             ))}
           </AnimatePresence>
+
+          {filteredTransactions.length === 0 && (
+            <Card className="border-0 shadow-lg">
+              <CardContent className="p-12 text-center">
+                <CreditCard className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No transactions found</h3>
+                <p className="text-gray-600">Try adjusting your filters or search criteria.</p>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 
@@ -525,6 +501,119 @@ export default function PaymentsTransactions() {
               </Card>
             </motion.div>
           ))}
+
+          {payoutRequests.length === 0 && (
+            <Card className="border-0 shadow-lg">
+              <CardContent className="p-12 text-center">
+                <Wallet className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No payout requests found</h3>
+                <p className="text-gray-600">No restaurants have requested payouts yet.</p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Analytics Tab */}
+      {activeTab === 'analytics' && (
+        <div className="space-y-6">
+          {/* Payment Method Distribution */}
+          <Card className="border-0 shadow-lg">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CreditCard className="w-5 h-5" />
+                Payment Method Distribution
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {['card', 'upi', 'wallet', 'cash'].map(method => {
+                  const methodTransactions = filteredTransactions.filter(t => t.paymentMethod === method && t.type === 'payment');
+                  const count = methodTransactions.length;
+                  const amount = methodTransactions.reduce((sum, t) => sum + t.amount, 0);
+                  return (
+                    <div key={method} className="text-center p-4 bg-gray-50 rounded-lg">
+                      <div className="text-2xl font-bold text-gray-900">{count}</div>
+                      <div className="text-sm text-gray-600 capitalize">{method}</div>
+                      <div className="text-xs text-green-600">₹{amount}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Transaction Status Overview */}
+          <Card className="border-0 shadow-lg">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="w-5 h-5" />
+                Transaction Status Overview
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {['completed', 'pending', 'failed', 'processing'].map(status => {
+                  const statusTransactions = filteredTransactions.filter(t => t.status === status);
+                  const count = statusTransactions.length;
+                  const amount = statusTransactions.reduce((sum, t) => sum + t.amount, 0);
+                  return (
+                    <div key={status} className="text-center p-4 bg-gray-50 rounded-lg">
+                      <div className="text-2xl font-bold text-gray-900">{count}</div>
+                      <div className="text-sm text-gray-600 capitalize">{status}</div>
+                      <div className="text-xs text-blue-600">₹{amount}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Top Performing Restaurants */}
+          <Card className="border-0 shadow-lg">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <DollarSign className="w-5 h-5" />
+                Top Performing Restaurants
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {(() => {
+                  const restaurantStats = filteredTransactions
+                    .filter(t => t.type === 'payment' && t.status === 'completed')
+                    .reduce((acc, t) => {
+                      if (!acc[t.restaurantId]) {
+                        acc[t.restaurantId] = {
+                          name: t.restaurantName,
+                          revenue: 0,
+                          transactions: 0
+                        };
+                      }
+                      acc[t.restaurantId].revenue += t.amount;
+                      acc[t.restaurantId].transactions += 1;
+                      return acc;
+                    }, {} as Record<string, { name: string; revenue: number; transactions: number }>);
+
+                  return Object.values(restaurantStats)
+                    .sort((a, b) => b.revenue - a.revenue)
+                    .slice(0, 5)
+                    .map((restaurant, index) => (
+                      <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div>
+                          <div className="font-medium">{restaurant.name}</div>
+                          <div className="text-sm text-gray-600">{restaurant.transactions} transactions</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-bold text-green-600">₹{restaurant.revenue}</div>
+                          <div className="text-xs text-gray-500">Revenue</div>
+                        </div>
+                      </div>
+                    ));
+                })()}
+              </div>
+            </CardContent>
+          </Card>
         </div>
       )}
 

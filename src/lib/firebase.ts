@@ -3157,3 +3157,536 @@ export async function updateVendorNotificationSettings(vendorId: string, setting
   }
 }
 
+// Admin Orders Management Functions
+export async function getAllOrdersForAdmin() {
+  try {
+    console.log('getAllOrdersForAdmin: Starting to fetch all orders');
+    
+    const ordersRef = collection(db, 'orders');
+    const ordersSnapshot = await getDocs(ordersRef);
+    
+    console.log('getAllOrdersForAdmin: Found', ordersSnapshot.docs.length, 'orders');
+    
+    const orders = [];
+    
+    for (const orderDoc of ordersSnapshot.docs) {
+      const orderData = orderDoc.data();
+      console.log('getAllOrdersForAdmin: Processing order:', orderDoc.id, orderData);
+      
+      // Get customer information
+      let customerName = 'Unknown Customer';
+      let customerPhone = '';
+      let customerEmail = '';
+      
+      if (orderData.userId) {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', orderData.userId));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            customerName = userData.name || userData.displayName || 'Unknown Customer';
+            customerPhone = userData.phone || '';
+            customerEmail = userData.email || '';
+          }
+        } catch (error) {
+          console.warn('Error fetching customer data for order:', orderDoc.id, error);
+        }
+      }
+      
+      // Get restaurant information
+      let restaurantName = orderData.restaurantName || 'Unknown Restaurant';
+      if (orderData.restaurantId && !restaurantName) {
+        try {
+          const restaurantDoc = await getDoc(doc(db, 'restaurants', orderData.restaurantId));
+          if (restaurantDoc.exists()) {
+            const restaurantData = restaurantDoc.data();
+            restaurantName = restaurantData.name || restaurantData.businessName || 'Unknown Restaurant';
+          }
+        } catch (error) {
+          console.warn('Error fetching restaurant data for order:', orderDoc.id, error);
+        }
+      }
+      
+      // Process order items
+      const items = (orderData.items || []).map((item: any) => ({
+        id: item.id || Math.random().toString(36).substr(2, 9),
+        name: item.name || 'Unknown Item',
+        quantity: item.quantity || 1,
+        price: item.unitPrice || item.price || 0,
+        isVeg: item.isVeg !== undefined ? item.isVeg : true
+      }));
+      
+      // Map Firebase order status to admin interface status
+      const mapStatus = (status: string) => {
+        const statusMap: { [key: string]: string } = {
+          'Placed': 'pending',
+          'Confirmed': 'accepted',
+          'Preparing': 'preparing',
+          'Ready to Serve': 'ready',
+          'Served': 'collected',
+          'Completed': 'collected',
+          'Cancelled': 'cancelled'
+        };
+        return statusMap[status] || 'pending';
+      };
+      
+      // Map payment status
+      const mapPaymentStatus = (paymentData: any) => {
+        if (!paymentData) return 'pending';
+        const status = paymentData.status || 'Pending';
+        const statusMap: { [key: string]: string } = {
+          'Pending': 'pending',
+          'Completed': 'completed',
+          'Failed': 'failed',
+          'Refunded': 'refunded'
+        };
+        return statusMap[status] || 'pending';
+      };
+      
+      // Determine order type
+      const getOrderType = (orderData: any) => {
+        if (orderData.dineIn || orderData.tableNumber) return 'dine-in';
+        if (orderData.deliveryAddress) return 'delivery';
+        return 'takeaway';
+      };
+      
+      // Convert timestamps
+      const convertTimestamp = (timestamp: any) => {
+        if (!timestamp) return new Date();
+        if (timestamp instanceof Timestamp) return timestamp.toDate();
+        if (typeof timestamp === 'string') return new Date(timestamp);
+        if (timestamp instanceof Date) return timestamp;
+        return new Date();
+      };
+      
+      const processedOrder = {
+        id: orderDoc.id,
+        orderNumber: orderData.orderNumber || `ORD-${orderDoc.id.slice(-6).toUpperCase()}`,
+        customerId: orderData.userId || '',
+        customerName,
+        customerPhone,
+        customerEmail,
+        restaurantId: orderData.restaurantId || '',
+        restaurantName,
+        items,
+        totalAmount: orderData.pricing?.totalAmount || orderData.totalAmount || 0,
+        status: mapStatus(orderData.status || 'Placed'),
+        paymentStatus: mapPaymentStatus(orderData.payment),
+        paymentMethod: orderData.payment?.method?.toLowerCase() || 'cash',
+        orderType: getOrderType(orderData),
+        createdAt: convertTimestamp(orderData.createdAt),
+        updatedAt: convertTimestamp(orderData.updatedAt),
+        estimatedTime: orderData.timing?.estimatedReady ? 
+          Math.round((new Date(orderData.timing.estimatedReady).getTime() - Date.now()) / (1000 * 60)) : 
+          undefined,
+        deliveryAddress: orderData.deliveryAddress || undefined,
+        tableNumber: orderData.dineIn?.tableNumber || orderData.tableNumber || undefined,
+        notes: orderData.notes || undefined,
+        refundReason: orderData.refundReason || undefined
+      };
+      
+      orders.push(processedOrder);
+    }
+    
+    // Sort by creation date (newest first)
+    orders.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    
+    console.log('getAllOrdersForAdmin: Processed', orders.length, 'orders successfully');
+    return orders;
+    
+  } catch (error) {
+    console.error('Error fetching orders for admin:', error);
+    throw error;
+  }
+}
+
+// Admin Payments & Transactions Management Functions
+export async function getAllTransactionsForAdmin() {
+  try {
+    console.log('getAllTransactionsForAdmin: Starting to fetch all transactions');
+    
+    const ordersRef = collection(db, 'orders');
+    const ordersSnapshot = await getDocs(ordersRef);
+    
+    console.log('getAllTransactionsForAdmin: Found', ordersSnapshot.docs.length, 'orders');
+    
+    const transactions = [];
+    
+    for (const orderDoc of ordersSnapshot.docs) {
+      const orderData = orderDoc.data();
+      console.log('getAllTransactionsForAdmin: Processing order:', orderDoc.id, orderData);
+      
+      // Skip orders without payment data
+      if (!orderData.payment && !orderData.totalAmount) {
+        continue;
+      }
+      
+      // Get customer information
+      let customerName = 'Unknown Customer';
+      if (orderData.userId) {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', orderData.userId));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            customerName = userData.name || userData.displayName || 'Unknown Customer';
+          }
+        } catch (error) {
+          console.warn('Error fetching customer data for transaction:', orderDoc.id, error);
+        }
+      }
+      
+      // Get restaurant information
+      let restaurantName = orderData.restaurantName || 'Unknown Restaurant';
+      if (orderData.restaurantId && !restaurantName) {
+        try {
+          const restaurantDoc = await getDoc(doc(db, 'restaurants', orderData.restaurantId));
+          if (restaurantDoc.exists()) {
+            const restaurantData = restaurantDoc.data();
+            restaurantName = restaurantData.name || restaurantData.businessName || 'Unknown Restaurant';
+          }
+        } catch (error) {
+          console.warn('Error fetching restaurant data for transaction:', orderDoc.id, error);
+        }
+      }
+      
+      // Map payment status
+      const mapPaymentStatus = (paymentData: any, orderStatus: string) => {
+        if (!paymentData) {
+          // Determine status based on order status if no payment data
+          if (orderStatus === 'Cancelled') return 'failed';
+          if (['Completed', 'Served'].includes(orderStatus)) return 'completed';
+          return 'pending';
+        }
+        
+        const status = paymentData.status || 'Pending';
+        const statusMap: { [key: string]: string } = {
+          'Pending': 'pending',
+          'Completed': 'completed',
+          'Failed': 'failed',
+          'Refunded': 'completed' // Refunded payments are technically completed
+        };
+        return statusMap[status] || 'pending';
+      };
+      
+      // Convert timestamps
+      const convertTimestamp = (timestamp: any) => {
+        if (!timestamp) return new Date();
+        if (timestamp instanceof Timestamp) return timestamp.toDate();
+        if (typeof timestamp === 'string') return new Date(timestamp);
+        if (timestamp instanceof Date) return timestamp;
+        return new Date();
+      };
+      
+      const orderAmount = orderData.pricing?.totalAmount || orderData.totalAmount || 0;
+      const paymentMethod = orderData.payment?.method?.toLowerCase() || 'cash';
+      const transactionId = orderData.payment?.transactionId || `TXN-${orderDoc.id.slice(-8).toUpperCase()}`;
+      const orderStatus = orderData.status || 'Placed';
+      const paymentStatus = mapPaymentStatus(orderData.payment, orderStatus);
+      
+      // Create main payment transaction
+      if (orderAmount > 0) {
+        const paymentTransaction = {
+          id: `pay-${orderDoc.id}`,
+          orderId: orderDoc.id,
+          orderNumber: orderData.orderNumber || `ORD-${orderDoc.id.slice(-6).toUpperCase()}`,
+          type: 'payment' as const,
+          amount: orderAmount,
+          status: paymentStatus,
+          paymentMethod: paymentMethod as 'card' | 'upi' | 'wallet' | 'cash',
+          customerId: orderData.userId || '',
+          customerName,
+          restaurantId: orderData.restaurantId || '',
+          restaurantName,
+          createdAt: convertTimestamp(orderData.createdAt),
+          completedAt: paymentStatus === 'completed' ? convertTimestamp(orderData.payment?.paidAt || orderData.updatedAt) : undefined,
+          transactionId,
+          gatewayResponse: orderData.payment?.gatewayResponse || undefined,
+          failureReason: paymentStatus === 'failed' ? orderData.payment?.failureReason || 'Payment failed' : undefined,
+          commission: Math.round(orderAmount * 0.1), // 10% commission
+          platformFee: Math.round(orderAmount * 0.03) // 3% platform fee
+        };
+        
+        transactions.push(paymentTransaction);
+      }
+      
+      // Create refund transaction if order was cancelled and payment was completed
+      if (orderStatus === 'Cancelled' && orderData.payment?.status === 'Completed' && orderAmount > 0) {
+        const refundTransaction = {
+          id: `ref-${orderDoc.id}`,
+          orderId: orderDoc.id,
+          orderNumber: orderData.orderNumber || `ORD-${orderDoc.id.slice(-6).toUpperCase()}`,
+          type: 'refund' as const,
+          amount: orderAmount,
+          status: 'completed' as const,
+          paymentMethod: paymentMethod as 'card' | 'upi' | 'wallet' | 'cash',
+          customerId: orderData.userId || '',
+          customerName,
+          restaurantId: orderData.restaurantId || '',
+          restaurantName,
+          createdAt: convertTimestamp(orderData.updatedAt),
+          completedAt: convertTimestamp(orderData.updatedAt),
+          transactionId: `REF-${transactionId}`,
+          gatewayResponse: 'Refund processed successfully',
+          failureReason: undefined,
+          commission: 0,
+          platformFee: 0
+        };
+        
+        transactions.push(refundTransaction);
+      }
+    }
+    
+    // Sort by creation date (newest first)
+    transactions.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    
+    console.log('getAllTransactionsForAdmin: Processed', transactions.length, 'transactions successfully');
+    return transactions;
+    
+  } catch (error) {
+    console.error('Error fetching transactions for admin:', error);
+    throw error;
+  }
+}
+
+export async function getAllPayoutRequestsForAdmin() {
+  try {
+    console.log('getAllPayoutRequestsForAdmin: Starting to fetch payout requests');
+    
+    // Check if payouts collection exists
+    const payoutsRef = collection(db, 'payouts');
+    const payoutsSnapshot = await getDocs(payoutsRef);
+    
+    console.log('getAllPayoutRequestsForAdmin: Found', payoutsSnapshot.docs.length, 'payout requests');
+    
+    const payoutRequests = [];
+    
+    for (const payoutDoc of payoutsSnapshot.docs) {
+      const payoutData = payoutDoc.data();
+      console.log('getAllPayoutRequestsForAdmin: Processing payout:', payoutDoc.id, payoutData);
+      
+      // Get restaurant information
+      let restaurantName = 'Unknown Restaurant';
+      if (payoutData.restaurantId) {
+        try {
+          const restaurantDoc = await getDoc(doc(db, 'restaurants', payoutData.restaurantId));
+          if (restaurantDoc.exists()) {
+            const restaurantData = restaurantDoc.data();
+            restaurantName = restaurantData.name || restaurantData.businessName || 'Unknown Restaurant';
+          }
+        } catch (error) {
+          console.warn('Error fetching restaurant data for payout:', payoutDoc.id, error);
+        }
+      }
+      
+      // Convert timestamps
+      const convertTimestamp = (timestamp: any) => {
+        if (!timestamp) return new Date();
+        if (timestamp instanceof Timestamp) return timestamp.toDate();
+        if (typeof timestamp === 'string') return new Date(timestamp);
+        if (timestamp instanceof Date) return timestamp;
+        return new Date();
+      };
+      
+      const payoutRequest = {
+        id: payoutDoc.id,
+        restaurantId: payoutData.restaurantId || '',
+        restaurantName,
+        amount: payoutData.amount || 0,
+        status: payoutData.status || 'pending',
+        requestedAt: convertTimestamp(payoutData.createdAt || payoutData.requestedAt),
+        processedAt: payoutData.processedAt ? convertTimestamp(payoutData.processedAt) : undefined,
+        bankDetails: {
+          accountNumber: payoutData.bankDetails?.accountNumber || '****0000',
+          ifscCode: payoutData.bankDetails?.ifscCode || 'UNKNOWN',
+          accountHolderName: payoutData.bankDetails?.accountHolderName || restaurantName
+        },
+        notes: payoutData.notes || payoutData.adminNotes || undefined
+      };
+      
+      payoutRequests.push(payoutRequest);
+    }
+    
+    // Sort by request date (newest first)
+    payoutRequests.sort((a, b) => b.requestedAt.getTime() - a.requestedAt.getTime());
+    
+    console.log('getAllPayoutRequestsForAdmin: Processed', payoutRequests.length, 'payout requests successfully');
+    return payoutRequests;
+    
+  } catch (error) {
+    console.error('Error fetching payout requests for admin:', error);
+    // Return empty array if payouts collection doesn't exist yet
+    return [];
+  }
+}
+
+// Get all customer users for admin management
+export async function getAllCustomersForAdmin() {
+  try {
+    console.log('getAllCustomersForAdmin: Starting to fetch customer users...');
+    
+    // Fetch all users with role 'customer'
+    const usersQuery = query(
+      collection(db, 'users'),
+      where('role', '==', 'customer')
+    );
+    
+    const usersSnapshot = await getDocs(usersQuery);
+    console.log('getAllCustomersForAdmin: Found', usersSnapshot.size, 'customer users');
+    
+    if (usersSnapshot.empty) {
+      console.log('getAllCustomersForAdmin: No customer users found');
+      return [];
+    }
+    
+    // Fetch all orders to calculate user statistics
+    const ordersSnapshot = await getDocs(collection(db, 'orders'));
+    console.log('getAllCustomersForAdmin: Found', ordersSnapshot.size, 'orders for statistics');
+    
+    // Group orders by user ID for statistics calculation
+    const userOrdersMap = new Map();
+    const userSpendingMap = new Map();
+    
+    ordersSnapshot.docs.forEach(orderDoc => {
+      const orderData = orderDoc.data();
+      const userId = orderData.userId;
+      
+      if (userId) {
+        // Count orders
+        if (!userOrdersMap.has(userId)) {
+          userOrdersMap.set(userId, 0);
+        }
+        userOrdersMap.set(userId, userOrdersMap.get(userId) + 1);
+        
+        // Calculate spending (only for completed orders)
+        if (orderData.status === 'Completed' && orderData.totalAmount) {
+          if (!userSpendingMap.has(userId)) {
+            userSpendingMap.set(userId, 0);
+          }
+          userSpendingMap.set(userId, userSpendingMap.get(userId) + orderData.totalAmount);
+        }
+      }
+    });
+    
+    const customers = [];
+    
+    for (const userDoc of usersSnapshot.docs) {
+      const userData = userDoc.data();
+      
+      // Helper function to safely convert timestamps
+      const convertTimestamp = (timestamp: any): Date => {
+        if (!timestamp) return new Date();
+        if (timestamp instanceof Timestamp) return timestamp.toDate();
+        if (typeof timestamp === 'string') return new Date(timestamp);
+        if (timestamp instanceof Date) return timestamp;
+        return new Date();
+      };
+      
+      // Calculate user statistics
+      const totalOrders = userOrdersMap.get(userDoc.id) || 0;
+      const totalSpent = userSpendingMap.get(userDoc.id) || 0;
+      const loyaltyPoints = Math.floor(totalSpent / 10); // 1 point per ₹10 spent
+      
+      // Determine user status based on account status or default to active
+      let userStatus = 'active';
+      if (userData.accountStatus === 'suspended' || userData.status === 'suspended') {
+        userStatus = 'suspended';
+      } else if (userData.accountStatus === 'banned' || userData.status === 'banned') {
+        userStatus = 'banned';
+      } else if (userData.accountStatus === 'inactive' || userData.status === 'inactive') {
+        userStatus = 'suspended';
+      }
+      
+      // Parse address information
+      let address = undefined;
+      if (userData.address) {
+        if (typeof userData.address === 'string') {
+          // If address is a string, try to parse it
+          address = {
+            street: userData.address,
+            city: userData.city || 'Unknown',
+            state: userData.state || 'Unknown',
+            pincode: userData.pincode || '000000'
+          };
+        } else if (typeof userData.address === 'object') {
+          // If address is an object, use its properties
+          address = {
+            street: userData.address.street || userData.address.line1 || userData.address.address || 'Unknown',
+            city: userData.address.city || 'Unknown',
+            state: userData.address.state || 'Unknown',
+            pincode: userData.address.pincode || userData.address.zipCode || '000000'
+          };
+        }
+      }
+      
+      // Parse preferences
+      const preferences = {
+        cuisine: userData.preferences?.cuisine || userData.favoriteCuisines || [],
+        dietaryRestrictions: userData.preferences?.dietaryRestrictions || userData.dietaryRestrictions || []
+      };
+      
+      // Parse favorite restaurants
+      const favoriteRestaurants = userData.favoriteRestaurants || userData.favorites || [];
+      
+      // Parse reports (if any)
+      const reports = userData.reports || [];
+      const reportCount = reports.length || 0;
+      
+      const customer = {
+        id: userDoc.id,
+        name: userData.name || userData.displayName || userData.fullName || 'Unknown User',
+        email: userData.email || 'No email provided',
+        phone: userData.phone || userData.phoneNumber || 'No phone provided',
+        avatar: userData.avatar || userData.photoURL || userData.profilePicture,
+        status: userStatus,
+        joinedAt: convertTimestamp(userData.createdAt || userData.joinedAt),
+        lastActive: convertTimestamp(userData.lastActive || userData.lastLoginAt || userData.updatedAt || userData.createdAt),
+        totalOrders,
+        totalSpent,
+        loyaltyPoints,
+        favoriteRestaurants,
+        address,
+        preferences,
+        reportCount,
+        reports: reports.map((report: any) => ({
+          id: report.id || Math.random().toString(36).substr(2, 9),
+          reason: report.reason || report.description || 'No reason provided',
+          reportedBy: report.reportedBy || report.reporter || 'Unknown',
+          reportedAt: convertTimestamp(report.reportedAt || report.createdAt)
+        }))
+      };
+      
+      customers.push(customer);
+    }
+    
+    // Sort customers by join date (newest first)
+    customers.sort((a, b) => b.joinedAt.getTime() - a.joinedAt.getTime());
+    
+    console.log('getAllCustomersForAdmin: Successfully processed', customers.length, 'customers');
+    return customers;
+    
+  } catch (error) {
+    console.error('Error fetching customers for admin:', error);
+    throw error;
+  }
+}
+
+// Update customer status for admin management
+export async function updateCustomerStatus(userId: string, status: 'active' | 'suspended' | 'banned') {
+  try {
+    console.log(`updateCustomerStatus: Updating user ${userId} status to ${status}`);
+    
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, {
+      status: status,
+      accountStatus: status,
+      updatedAt: new Date()
+    });
+    
+    console.log(`updateCustomerStatus: Successfully updated user ${userId} status to ${status}`);
+    return true;
+    
+  } catch (error) {
+    console.error('Error updating customer status:', error);
+    throw error;
+  }
+}
+

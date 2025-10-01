@@ -27,6 +27,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
+import { getAllCustomersForAdmin, updateCustomerStatus } from '@/lib/firebase';
 
 interface User {
   id: string;
@@ -81,66 +82,21 @@ export default function UserManagement() {
   const loadUsers = async () => {
     setIsLoading(true);
     try {
-      // Mock data - replace with Firebase queries
-      const mockUsers: User[] = [
-        {
-          id: '1',
-          name: 'John Doe',
-          email: 'john@example.com',
-          phone: '+91 9876543210',
-          avatar: '/api/placeholder/100/100',
-          status: 'active',
-          joinedAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-          lastActive: new Date(Date.now() - 2 * 60 * 60 * 1000),
-          totalOrders: 25,
-          totalSpent: 12500,
-          loyaltyPoints: 1250,
-          favoriteRestaurants: ['Pizza Palace', 'Spice Garden'],
-          address: {
-            street: '123 Main St',
-            city: 'Mumbai',
-            state: 'Maharashtra',
-            pincode: '400001'
-          },
-          preferences: {
-            cuisine: ['Italian', 'Indian'],
-            dietaryRestrictions: ['Vegetarian']
-          },
-          reportCount: 0,
-          reports: []
-        },
-        {
-          id: '2',
-          name: 'Jane Smith',
-          email: 'jane@example.com',
-          phone: '+91 8765432109',
-          status: 'suspended',
-          joinedAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000),
-          lastActive: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-          totalOrders: 5,
-          totalSpent: 2200,
-          loyaltyPoints: 220,
-          favoriteRestaurants: ['Burger King'],
-          preferences: {
-            cuisine: ['American', 'Continental'],
-            dietaryRestrictions: []
-          },
-          reportCount: 2,
-          reports: [
-            {
-              id: '1',
-              reason: 'Inappropriate behavior with delivery staff',
-              reportedBy: 'Pizza Palace',
-              reportedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000)
-            }
-          ]
-        }
-      ];
-
-      setUsers(mockUsers);
+      console.log('Loading customer users from Firebase...');
+      const customers = await getAllCustomersForAdmin();
+      console.log('Loaded', customers.length, 'customers successfully');
+      
+      setUsers(customers);
+      
+      if (customers.length === 0) {
+        toast.info('No customer users found in the database');
+      } else {
+        toast.success(`Loaded ${customers.length} customer users successfully`);
+      }
     } catch (error) {
       console.error('Error loading users:', error);
-      toast.error('Failed to load user data');
+      toast.error('Failed to load user data from Firebase');
+      setUsers([]); // Set empty array on error
     } finally {
       setIsLoading(false);
     }
@@ -196,12 +152,20 @@ export default function UserManagement() {
   const handleUserAction = async (userId: string, action: 'suspend' | 'activate' | 'ban') => {
     try {
       const newStatus = action === 'suspend' ? 'suspended' : action === 'ban' ? 'banned' : 'active';
+      
+      // Update status in Firebase
+      await updateCustomerStatus(userId, newStatus);
+      
+      // Update local state
       setUsers(prev => prev.map(user =>
         user.id === userId ? { ...user, status: newStatus as any } : user
       ));
-      toast.success(`User ${action}${action.endsWith('e') ? 'd' : 'ned'} successfully`);
+      
+      const actionText = action === 'suspend' ? 'suspended' : action === 'ban' ? 'banned' : 'activated';
+      toast.success(`User ${actionText} successfully`);
     } catch (error) {
-      toast.error(`Failed to ${action} user`);
+      console.error(`Error ${action}ing user:`, error);
+      toast.error(`Failed to ${action} user. Please try again.`);
     }
   };
 
@@ -436,12 +400,29 @@ export default function UserManagement() {
           ))}
         </AnimatePresence>
 
-        {filteredUsers.length === 0 && (
+        {filteredUsers.length === 0 && !isLoading && (
           <Card className="border-0 shadow-lg">
             <CardContent className="p-12 text-center">
               <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No users found</h3>
-              <p className="text-gray-600">Try adjusting your search or filter criteria.</p>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                {users.length === 0 ? 'No customer users found' : 'No users match your criteria'}
+              </h3>
+              <p className="text-gray-600">
+                {users.length === 0 
+                  ? 'No customers have registered yet or none have the role "customer" in Firebase.'
+                  : 'Try adjusting your search or filter criteria.'
+                }
+              </p>
+              {users.length === 0 && (
+                <Button 
+                  variant="outline" 
+                  onClick={loadUsers}
+                  className="mt-4"
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Refresh Data
+                </Button>
+              )}
             </CardContent>
           </Card>
         )}

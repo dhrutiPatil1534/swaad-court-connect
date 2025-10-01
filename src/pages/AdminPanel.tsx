@@ -36,6 +36,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/auth-context';
 import { getAdminDashboardStats, getRecentActivity } from '@/lib/firebase';
 import VendorManagement from '@/components/admin/VendorManagement';
@@ -51,6 +52,7 @@ type AdminSection = 'dashboard' | 'vendors' | 'restaurants' | 'orders' | 'paymen
 
 export default function AdminPanel() {
   const { user, isLoading: authLoading, logout } = useAuth();
+  const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState<AdminSection>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [dashboardLoading, setDashboardLoading] = useState(false);
@@ -66,18 +68,28 @@ export default function AdminPanel() {
   });
 
   useEffect(() => {
+    console.log('AdminPanel useEffect - user:', user, 'authLoading:', authLoading);
+    
     // Check admin permissions - wait for auth to be initialized
     if (authLoading) {
       return; // Don't check permissions while auth is still loading
     }
     
-    if (!user || user.role !== 'admin') {
+    if (!user) {
+      // User is not authenticated, redirect to login
+      console.log('AdminPanel: No user found, redirecting to login');
+      navigate('/login');
+      return;
+    }
+    
+    if (user.role !== 'admin') {
       toast.error('Access denied. Admin privileges required.');
+      navigate('/'); // Redirect to home page for non-admin users
       return;
     }
 
     loadDashboardStats();
-  }, [user, authLoading]);
+  }, [user, authLoading, navigate]);
 
   const loadDashboardStats = async () => {
     setDashboardLoading(true);
@@ -94,8 +106,16 @@ export default function AdminPanel() {
 
   const handleLogout = async () => {
     try {
+      console.log('AdminPanel: Starting logout process');
       await logout();
+      console.log('AdminPanel: Logout completed');
       toast.success('Logged out successfully');
+      
+      // Force navigation after a short delay to ensure auth state is updated
+      setTimeout(() => {
+        console.log('AdminPanel: Forcing navigation to login');
+        navigate('/login', { replace: true });
+      }, 500);
     } catch (error) {
       console.error('Error logging out:', error);
       toast.error('Failed to logout');
