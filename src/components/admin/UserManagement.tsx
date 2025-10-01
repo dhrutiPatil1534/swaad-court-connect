@@ -214,29 +214,29 @@ export default function UserManagement() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="border-0 shadow-lg">
           <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-gray-900">{stats.totalUsers}</div>
-            <div className="text-sm text-gray-600">Total Users</div>
+            <div className="text-2xl font-bold text-white-900">{stats.totalUsers}</div>
+            <div className="text-sm text-gray-600-bold">Total Users</div>
           </CardContent>
         </Card>
 
         <Card className="border-0 shadow-lg">
           <CardContent className="p-4 text-center">
             <div className="text-2xl font-bold text-green-600">{stats.activeUsers}</div>
-            <div className="text-sm text-gray-600">Active Users</div>
+            <div className="text-sm text-gray-600-bold">Active Users</div>
           </CardContent>
         </Card>
 
         <Card className="border-0 shadow-lg">
           <CardContent className="p-4 text-center">
             <div className="text-2xl font-bold text-yellow-600">{stats.suspendedUsers}</div>
-            <div className="text-sm text-gray-600">Suspended</div>
+            <div className="text-sm text-gray-600-bold">Suspended</div>
           </CardContent>
         </Card>
 
         <Card className="border-0 shadow-lg">
           <CardContent className="p-4 text-center">
             <div className="text-2xl font-bold text-purple-600">₹{stats.totalRevenue}</div>
-            <div className="text-sm text-gray-600">Total Revenue</div>
+            <div className="text-sm text-gray-600-bold">Total Revenue</div>
           </CardContent>
         </Card>
       </div>
@@ -308,7 +308,7 @@ export default function UserManagement() {
 
                       <div>
                         <h3 className="font-semibold text-lg">{user.name}</h3>
-                        <div className="flex items-center gap-4 text-sm text-gray-600">
+                        <div className="flex items-center gap-4 text-sm text-gray-600-bold">
                           <span className="flex items-center gap-1">
                             <Mail className="w-3 h-3" />
                             {user.email}
@@ -322,24 +322,24 @@ export default function UserManagement() {
 
                       <div className="hidden md:block text-center">
                         <div className="text-lg font-bold text-blue-600">{user.totalOrders}</div>
-                        <div className="text-sm text-gray-600">Orders</div>
+                        <div className="text-sm text-gray-600-bold">Orders</div>
                       </div>
 
                       <div className="hidden md:block text-center">
                         <div className="text-lg font-bold text-green-600">₹{user.totalSpent}</div>
-                        <div className="text-sm text-gray-600">Spent</div>
+                        <div className="text-sm text-gray-600-bold">Spent</div>
                       </div>
 
                       <div className="hidden md:block text-center">
                         <div className="text-lg font-bold text-purple-600">{user.loyaltyPoints}</div>
-                        <div className="text-sm text-gray-600">Points</div>
+                        <div className="text-sm text-gray-600-bold">Points</div>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-4">
                       <div className="text-right">
                         <div>{getStatusBadge(user.status)}</div>
-                        <div className="text-sm text-gray-600 mt-1">
+                        <div className="text-sm text-gray-600-bold mt-1">
                           Joined {user.joinedAt.toLocaleDateString()}
                         </div>
                       </div>

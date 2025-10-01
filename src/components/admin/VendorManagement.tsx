@@ -319,36 +319,36 @@ export default function VendorManagement() {
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <Card className="border-0 shadow-lg">
           <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-gray-900">{stats.total}</div>
-            <div className="text-sm text-gray-600">Total Restaurants</div>
+            <div className="text-2xl font-bold text-white-900">{stats.total}</div>
+            <div className="text-sm text-gray-600-bold">Total Restaurants</div>
           </CardContent>
         </Card>
 
         <Card className="border-0 shadow-lg">
           <CardContent className="p-4 text-center">
             <div className="text-2xl font-bold text-green-600">{stats.active}</div>
-            <div className="text-sm text-gray-600">Active</div>
+            <div className="text-sm text-gray-600-bold">Active</div>
           </CardContent>
         </Card>
 
         <Card className="border-0 shadow-lg">
           <CardContent className="p-4 text-center">
             <div className="text-2xl font-bold text-blue-600">{stats.open}</div>
-            <div className="text-sm text-gray-600">Currently Open</div>
+            <div className="text-sm text-gray-600-bold">Currently Open</div>
           </CardContent>
         </Card>
 
         <Card className="border-0 shadow-lg">
           <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-gray-600">{stats.inactive}</div>
-            <div className="text-sm text-gray-600">Inactive</div>
+            <div className="text-2xl font-bold text-orange-600">{stats.inactive}</div>
+            <div className="text-sm text-gray-600-bold">Inactive</div>
           </CardContent>
         </Card>
 
         <Card className="border-0 shadow-lg">
           <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-orange-600">{stats.suspended}</div>
-            <div className="text-sm text-gray-600">Suspended</div>
+            <div className="text-2xl font-bold text-red-600">{stats.suspended}</div>
+            <div className="text-sm text-gray-600-bold">Suspended</div>
           </CardContent>
         </Card>
       </div>
@@ -406,7 +406,7 @@ export default function VendorManagement() {
                           </Avatar>
                           
                           <div>
-                            <h3 className="text-xl font-semibold text-gray-900">{vendor.name}</h3>
+                            <h3 className="text-xl font-semibold text-White-900">{vendor.name}</h3>
                             <div className="flex items-center gap-2 mt-1">
                               {getStatusIcon(vendor.status)}
                               {getStatusBadge(vendor.status)}
@@ -424,27 +424,24 @@ export default function VendorManagement() {
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                         {vendor.email && (
-                          <div className="flex items-center gap-2 text-sm text-gray-600">
+                          <div className="flex items-center gap-2 text-sm text-gray-600-bold">
                             <Mail className="w-4 h-4" />
                             {vendor.email}
                           </div>
                         )}
                         {vendor.phone && (
-                          <div className="flex items-center gap-2 text-sm text-gray-600">
+                          <div className="flex items-center gap-2 text-sm text-gray-600-bold">
                             <Phone className="w-4 h-4" />
                             {vendor.phone}
                           </div>
                         )}
                         {vendor.address && (
-                          <div className="flex items-center gap-2 text-sm text-gray-600">
+                          <div className="flex items-center gap-2 text-sm text-gray-600-bold">
                             <MapPin className="w-4 h-4" />
                             {vendor.address}
                           </div>
                         )}
-                        <div className="flex items-center gap-2 text-sm text-gray-600">
-                          <DollarSign className="w-4 h-4" />
-                          Avg Price: ₹{vendor.averagePrice}
-                        </div>
+                        
                       </div>
 
                       {/* Restaurant Stats */}
@@ -477,7 +474,7 @@ export default function VendorManagement() {
                           <span className="text-sm font-medium text-blue-700">Restaurant Status</span>
                         </div>
                         <p className="text-sm text-blue-600">
-                          {vendor.isOpen ? 'Currently Open' : 'Currently Closed'} • {vendor.distance}
+                          {vendor.isOpen ? 'Currently Open' : 'Currently Closed'} 
                         </p>
                       </div>
                     </div>

@@ -295,7 +295,9 @@ export default function Login() {
           const isAdmin = await checkAdminCredentials(email);
           
           if (!isAdmin) {
-            toast.error('Admin account exists but authentication failed. Please check your credentials.');
+            // Sign out the user since they don't have admin privileges
+            await import('@/lib/firebase').then(({ auth }) => auth.signOut());
+            toast.error('Access denied. This account does not have admin privileges.');
             setIsLoading(false);
             return;
           }
@@ -312,6 +314,8 @@ export default function Login() {
             user.name = adminData.name || 'Admin';
             user.adminProfile = adminData;
           } else {
+            // Sign out if profile not found
+            await import('@/lib/firebase').then(({ auth }) => auth.signOut());
             toast.error('Admin profile not found. Please contact system administrator.');
             setIsLoading(false);
             return;

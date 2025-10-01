@@ -23,7 +23,6 @@ import {
 import { 
   getAuth, 
   signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword,
   signInWithPhoneNumber,
   RecaptchaVerifier,
   ConfirmationResult,
@@ -471,61 +470,28 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
 
 export async function checkAdminCredentials(email: string): Promise<boolean> {
   try {
-    // Check if admin exists by email in the users collection with role 'admin'
-    const usersRef = collection(db, 'users');
-    const q = query(usersRef, where('email', '==', email), where('role', '==', 'admin'));
+    // Check if admin exists by email in the admins collection
+    const adminsRef = collection(db, 'admins');
+    const q = query(adminsRef, where('email', '==', email));
     const querySnapshot = await getDocs(q);
     
-    return !querySnapshot.empty;
+    if (!querySnapshot.empty) {
+      return true;
+    }
+    
+    // Also check in users collection for backward compatibility
+    const usersRef = collection(db, 'users');
+    const userQuery = query(usersRef, where('email', '==', email), where('role', '==', 'admin'));
+    const userSnapshot = await getDocs(userQuery);
+    
+    return !userSnapshot.empty;
   } catch (error) {
     console.error('Error checking admin credentials:', error);
     return false;
   }
 };
 
-// Admin Authentication Functions
-export async function createAdminAccount() {
-  try {
-    // Create admin user in Firebase Auth
-    const adminCredential = await createUserWithEmailAndPassword(
-      auth, 
-      'admin@swaadcourtconnect.com', 
-      'Admin@123456'
-    );
-    
-    // Update admin profile
-    await updateProfile(adminCredential.user, {
-      displayName: 'Platform Administrator'
-    });
 
-    // Create admin document in SEPARATE admins collection (NOT users collection)
-    await setDoc(doc(db, 'admins', adminCredential.user.uid), {
-      email: 'admin@swaadcourtconnect.com',
-      name: 'Platform Administrator',
-      role: 'admin',
-      permissions: ['all'],
-      createdAt: Timestamp.now(),
-      isActive: true,
-      uid: adminCredential.user.uid
-    });
-
-    console.log('Admin account created successfully in admins collection');
-    return adminCredential.user;
-  } catch (error) {
-    console.error('Error creating admin account:', error);
-    throw error;
-  }
-};
-
-export async function verifyAdminAccess(userId: string): Promise<boolean> {
-  try {
-    const adminDoc = await getDoc(doc(db, 'admins', userId));
-    return adminDoc.exists() && adminDoc.data()?.isActive === true;
-  } catch (error) {
-    console.error('Error verifying admin access:', error);
-    return false;
-  }
-};
 
 export async function getAdminProfile(userId: string) {
   try {
@@ -3849,12 +3815,9 @@ export async function getVendorInfoForPasswordReset(email: string) {
       id: vendorDoc.id,
       name: vendorData.name || 'Unknown',
       email: vendorData.email,
-      businessName: vendorData.businessName || 'Unknown Business',
-      phone: vendorData.phone || 'Not provided',
-      status: vendorData.status || 'unknown',
-      joinedAt: vendorData.createdAt?.toDate() || new Date(),
-      lastLogin: vendorData.lastLogin?.toDate() || null,
-      // NEVER include password or sensitive data
+      role: vendorData.role,
+      createdAt: vendorData.createdAt,
+      isActive: vendorData.isActive
     };
     
   } catch (error) {
@@ -3862,4 +3825,3 @@ export async function getVendorInfoForPasswordReset(email: string) {
     throw error;
   }
 }
-

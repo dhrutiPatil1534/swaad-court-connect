@@ -219,16 +219,16 @@ export default function RestaurantMonitoring() {
 
                 <div className="grid grid-cols-3 gap-6 text-center">
                   <div>
-                    <div className="text-2xl font-bold text-gray-900">{restaurant.menuItemsCount}</div>
-                    <div className="text-sm text-gray-600">Menu Items</div>
+                    <div className="text-2xl font-bold text-orange-900">{restaurant.menuItemsCount}</div>
+                    <div className="text-sm text-gray-600-bold">Menu Items</div>
                   </div>
                   <div>
                     <div className="text-2xl font-bold text-red-600">{restaurant.flaggedItemsCount}</div>
-                    <div className="text-sm text-gray-600">Flagged</div>
+                    <div className="text-sm text-gray-600-bold">Flagged</div>
                   </div>
                   <div>
                     <div className="text-2xl font-bold text-green-600">₹{restaurant.averagePrice}</div>
-                    <div className="text-sm text-gray-600">Avg Price</div>
+                    <div className="text-sm text-gray-600-bold">Avg Price</div>
                   </div>
                 </div>
 
@@ -381,14 +381,14 @@ export default function RestaurantMonitoring() {
         <Card className="border-0 shadow-lg">
           <CardContent className="p-4 text-center">
             <div className="text-2xl font-bold text-black-900">{restaurants.length}</div>
-            <div className="text-sm text-gray-600">Total Restaurants</div>
+            <div className="text-sm text-gray-600-bold">Total Restaurants</div>
           </CardContent>
         </Card>
 
         <Card className="border-0 shadow-lg">
           <CardContent className="p-4 text-center">
             <div className="text-2xl font-bold text-blue-600">{menuItems.length}</div>
-            <div className="text-sm text-gray-600">Menu Items</div>
+            <div className="text-sm text-gray-600-bold">Menu Items</div>
           </CardContent>
         </Card>
 
@@ -397,7 +397,7 @@ export default function RestaurantMonitoring() {
             <div className="text-2xl font-bold text-red-600">
               {menuItems.filter(item => item.reportCount > 0).length}
             </div>
-            <div className="text-sm text-gray-600">Flagged Items</div>
+            <div className="text-sm text-gray-600-bold">Flagged Items</div>
           </CardContent>
         </Card>
 
@@ -406,7 +406,7 @@ export default function RestaurantMonitoring() {
             <div className="text-2xl font-bold text-green-600">
               {menuItems.filter(item => item.status === 'active').length}
             </div>
-            <div className="text-sm text-gray-600">Active Items</div>
+            <div className="text-sm text-gray-600-bold">Active Items</div>
           </CardContent>
         </Card>
       </div>

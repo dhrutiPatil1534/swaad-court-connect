@@ -25,7 +25,8 @@ import {
   sendVendorPasswordReset,
   sendCustomerPasswordReset,
   getPasswordResetLogs,
-  getVendorInfoForPasswordReset
+  getVendorInfoForPasswordReset,
+  getAllVendors
 } from '@/lib/firebase';
 
 interface PasswordResetLog {
@@ -37,6 +38,17 @@ interface PasswordResetLog {
   status: string;
 }
 
+interface Vendor {
+  id: string;
+  email: string;
+  name?: string;
+  displayName?: string;
+  businessName?: string;
+  phone?: string;
+  status: string;
+  createdAt?: any;
+}
+
 export default function PasswordResetManager() {
   const [resetLogs, setResetLogs] = useState<PasswordResetLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -46,10 +58,24 @@ export default function PasswordResetManager() {
   const [actionLoading, setActionLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [showVendorLookup, setShowVendorLookup] = useState(false);
+  const [vendorSearchQuery, setVendorSearchQuery] = useState('');
 
   useEffect(() => {
     loadPasswordResetLogs();
+    loadVendors();
   }, []);
+
+  const loadVendors = async () => {
+    try {
+      const vendorData = await getAllVendors();
+      setVendors(vendorData);
+    } catch (error) {
+      console.error('Error loading vendors:', error);
+      toast.error('Failed to load vendor data');
+    }
+  };
 
   const loadPasswordResetLogs = async () => {
     setIsLoading(true);
@@ -98,6 +124,23 @@ export default function PasswordResetManager() {
       setActionLoading(false);
     }
   };
+
+  const handleVendorSelect = (vendor: Vendor) => {
+    setResetEmail(vendor.email);
+    setResetUserType('vendor');
+    setShowVendorLookup(false);
+    setShowResetDialog(true);
+  };
+
+  const filteredVendors = vendors.filter(vendor => {
+    const searchLower = vendorSearchQuery.toLowerCase();
+    return (
+      vendor.email.toLowerCase().includes(searchLower) ||
+      (vendor.name && vendor.name.toLowerCase().includes(searchLower)) ||
+      (vendor.displayName && vendor.displayName.toLowerCase().includes(searchLower)) ||
+      (vendor.businessName && vendor.businessName.toLowerCase().includes(searchLower))
+    );
+  });
 
   const filteredLogs = resetLogs.filter(log => {
     const matchesSearch = log.email.toLowerCase().includes(searchQuery.toLowerCase());
@@ -161,88 +204,164 @@ export default function PasswordResetManager() {
           </p>
         </div>
         
-        <Dialog open={showResetDialog} onOpenChange={setShowResetDialog}>
-          <DialogTrigger asChild>
-            <Button className="gap-2 bg-blue-600 hover:bg-blue-700">
-              <Key className="w-4 h-4" />
-              Send Password Reset
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Send Secure Password Reset Email</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="p-4 bg-blue-50 rounded-lg">
-                <div className="flex items-start gap-3">
-                  <Shield className="w-5 h-5 text-blue-600 mt-0.5" />
-                  <div>
-                    <h4 className="font-medium text-blue-900">Security Best Practice</h4>
-                    <p className="text-sm text-blue-700 mt-1">
-                      This sends a secure password reset link via Firebase Auth. 
-                      Passwords are never stored or displayed - only secure reset links are sent.
-                    </p>
-                  </div>
+        <div className="flex gap-2">
+          <Dialog open={showVendorLookup} onOpenChange={setShowVendorLookup}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                <Users className="w-4 h-4" />
+                View Vendor Emails
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden">
+              <DialogHeader>
+                <DialogTitle>Vendor Directory - Email Lookup</DialogTitle>
+                <p className="text-sm text-gray-600">
+                  Find vendor emails to send password reset links. Click on any vendor to send them a reset email.
+                </p>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Search className="w-4 h-4 text-gray-400" />
+                  <Input
+                    placeholder="Search by email, name, or business name..."
+                    value={vendorSearchQuery}
+                    onChange={(e) => setVendorSearchQuery(e.target.value)}
+                    className="flex-1"
+                  />
+                </div>
+                
+                <div className="max-h-96 overflow-y-auto border rounded-lg">
+                  {filteredVendors.length === 0 ? (
+                    <div className="p-8 text-center text-gray-500">
+                      {vendorSearchQuery ? 'No vendors found matching your search.' : 'No vendors found.'}
+                    </div>
+                  ) : (
+                    <div className="divide-y">
+                      {filteredVendors.map((vendor) => (
+                        <div
+                          key={vendor.id}
+                          className="p-4 hover:bg-gray-50 cursor-pointer transition-colors"
+                          onClick={() => handleVendorSelect(vendor)}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <Mail className="w-4 h-4 text-blue-600" />
+                                <span className="font-medium text-gray-900">{vendor.email}</span>
+                                <Badge 
+                                  variant={vendor.status === 'active' ? 'default' : 'secondary'}
+                                  className="text-xs"
+                                >
+                                  {vendor.status}
+                                </Badge>
+                              </div>
+                              <div className="text-sm text-gray-600">
+                                <div>Name: {vendor.name || vendor.displayName || 'Not provided'}</div>
+                                {vendor.businessName && (
+                                  <div>Business: {vendor.businessName}</div>
+                                )}
+                                {vendor.phone && (
+                                  <div>Phone: {vendor.phone}</div>
+                                )}
+                              </div>
+                            </div>
+                            <Button size="sm" variant="outline" className="gap-1">
+                              <Key className="w-3 h-3" />
+                              Reset Password
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
-              
-              <div>
-                <Label htmlFor="userType">User Type</Label>
-                <Select value={resetUserType} onValueChange={(value: 'vendor' | 'customer') => setResetUserType(value)}>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="vendor">
-                      <div className="flex items-center gap-2">
-                        <Store className="w-4 h-4" />
-                        Vendor
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="customer">
-                      <div className="flex items-center gap-2">
-                        <Users className="w-4 h-4" />
-                        Customer
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={showResetDialog} onOpenChange={setShowResetDialog}>
+            <DialogTrigger asChild>
+              <Button className="gap-2 bg-blue-600 hover:bg-blue-700">
+                <Key className="w-4 h-4" />
+                Send Password Reset
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Send Secure Password Reset Email</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="p-4 bg-blue-50 rounded-lg">
+                  <div className="flex items-start gap-3">
+                    <Shield className="w-5 h-5 text-blue-600 mt-0.5" />
+                    <div>
+                      <h4 className="font-medium text-blue-900">Security Best Practice</h4>
+                      <p className="text-sm text-blue-700 mt-1">
+                        This sends a secure password reset link via Firebase Auth. 
+                        Passwords are never stored or displayed - only secure reset links are sent.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div>
+                  <Label htmlFor="userType">User Type</Label>
+                  <Select value={resetUserType} onValueChange={(value: 'vendor' | 'customer') => setResetUserType(value)}>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="vendor">
+                        <div className="flex items-center gap-2">
+                          <Store className="w-4 h-4" />
+                          Vendor
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="customer">
+                        <div className="flex items-center gap-2">
+                          <Users className="w-4 h-4" />
+                          Customer
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div>
+                  <Label htmlFor="resetEmail">Email Address</Label>
+                  <Input
+                    id="resetEmail"
+                    type="email"
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                    placeholder="Enter user email address"
+                    className="mt-1"
+                  />
+                </div>
+                
+                <div className="flex gap-3">
+                  <Button
+                    onClick={handlePasswordReset}
+                    disabled={actionLoading || !resetEmail.trim()}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700"
+                  >
+                    {actionLoading ? 'Sending...' : 'Send Reset Email'}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowResetDialog(false);
+                      setResetEmail('');
+                    }}
+                    className="flex-1"
+                  >
+                    Cancel
+                  </Button>
+                </div>
               </div>
-              
-              <div>
-                <Label htmlFor="resetEmail">Email Address</Label>
-                <Input
-                  id="resetEmail"
-                  type="email"
-                  value={resetEmail}
-                  onChange={(e) => setResetEmail(e.target.value)}
-                  placeholder="Enter user email address"
-                  className="mt-1"
-                />
-              </div>
-              
-              <div className="flex gap-3">
-                <Button
-                  onClick={handlePasswordReset}
-                  disabled={actionLoading || !resetEmail.trim()}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700"
-                >
-                  {actionLoading ? 'Sending...' : 'Send Reset Email'}
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setShowResetDialog(false);
-                    setResetEmail('');
-                  }}
-                  className="flex-1"
-                >
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Filters */}
