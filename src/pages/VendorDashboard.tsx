@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   BarChart3,
@@ -311,28 +311,33 @@ export default function VendorDashboard() {
   const [vendorProfile, setVendorProfile] = useState<VendorProfile | null>(null);
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
 
-  // Check if user is vendor
-  useEffect(() => {
-    if (!user || user.role !== 'vendor') {
-      navigate('/login');
+  console.log('🏪 VendorDashboard rendered, user:', user);
+
+  const loadVendorData = useCallback(async () => {
+    console.log('🔄 loadVendorData called, user:', user);
+    if (!user?.uid) {
+      console.log('❌ No user.uid, returning early');
       return;
     }
-    loadVendorData();
-  }, [user, navigate]);
-
-  const loadVendorData = async () => {
-    if (!user?.uid) return;
     
     setIsLoading(true);
     try {
+      console.log('🔄 Loading vendor data for:', user.uid);
+      
       // Load vendor profile and stats
+      console.log('📡 Fetching profile and stats...');
       const [profile, stats] = await Promise.all([
         getVendorProfile(user.uid),
         getVendorStats(user.uid)
       ]);
 
+      console.log('✅ Profile loaded:', profile);
+      console.log('✅ Stats loaded:', stats);
+
       if (profile) {
         setVendorProfile(profile);
+      } else {
+        throw new Error('Failed to load vendor profile');
       }
 
       // Set dashboard stats
@@ -341,8 +346,16 @@ export default function VendorDashboard() {
         ...stats
       }));
 
-      // Set up real-time orders listener
-      const unsubscribe = getVendorOrdersRealtime(user.uid, (orders) => {
+      // Set up real-time orders listener using restaurantId
+      const restaurantId = profile?.restaurantId || user.uid;
+      console.log('📡 Setting up real-time listener for restaurant:', restaurantId);
+      
+      const unsubscribe = getVendorOrdersRealtime(restaurantId, (orders) => {
+        console.log('📦 Received orders update:', orders.length);
+        
+        // First callback means listener is working, so we can stop loading
+        setIsLoading(false);
+        
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         
@@ -374,14 +387,27 @@ export default function VendorDashboard() {
         setRecentOrders(orders.slice(0, 5));
       });
 
+      console.log('✅ Real-time listener set up successfully');
+      
       return () => unsubscribe && unsubscribe();
     } catch (error) {
-      console.error('Error loading vendor data:', error);
-      toast.error('Failed to load dashboard data');
-    } finally {
+      console.error('❌ Error loading vendor data:', error);
+      toast.error('Failed to load dashboard data: ' + (error as Error).message);
       setIsLoading(false);
     }
-  };
+  }, [user, navigate]);
+
+  // Check if user is vendor and load data
+  useEffect(() => {
+    console.log('🔍 useEffect triggered, user:', user);
+    if (!user || user.role !== 'vendor') {
+      console.log('❌ User is not vendor or not logged in, redirecting...');
+      navigate('/login');
+      return;
+    }
+    console.log('✅ User is vendor, calling loadVendorData...');
+    loadVendorData();
+  }, [user, navigate, loadVendorData]);
 
   const handleLogout = async () => {
     try {

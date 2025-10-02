@@ -26,7 +26,7 @@ import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/context/auth-context';
 import { 
   getVendorOrdersRealtime, 
   updateOrderStatus,
@@ -84,38 +84,50 @@ export default function OrdersManagement() {
 
   // Real-time orders subscription
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.uid) return;
 
     setIsLoading(true);
+    let unsubscribe: (() => void) | null = null;
     
-    // Load vendor profile
+    // Load vendor profile and set up real-time listener
     const loadVendorProfile = async () => {
       try {
-        const profile = await getVendorProfile(user.id);
+        const profile = await getVendorProfile(user.uid);
         setVendorProfile(profile);
+        
+        // Use restaurantId if available, otherwise use uid
+        const vendorIdToUse = profile?.restaurantId || user.uid;
+        console.log('📡 OrdersManagement: Setting up listener for:', vendorIdToUse);
+        
+        // Subscribe to real-time orders using restaurantId
+        unsubscribe = getVendorOrdersRealtime(vendorIdToUse, (ordersData) => {
+          console.log('📦 OrdersManagement: Received orders:', ordersData.length);
+          const formattedOrders = ordersData.map(order => ({
+            ...order,
+            customerName: order.userDetails?.name || 'Unknown Customer',
+            customerPhone: order.userDetails?.phone || '',
+            createdAt: order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt),
+            totalAmount: order.pricing?.totalAmount || 0
+          }));
+          
+          setOrders(formattedOrders);
+          setIsLoading(false);
+        });
       } catch (error) {
         console.error('Error loading vendor profile:', error);
+        setIsLoading(false);
       }
     };
 
     loadVendorProfile();
 
-    // Subscribe to real-time orders
-    const unsubscribe = getVendorOrdersRealtime(user.id, (ordersData) => {
-      const formattedOrders = ordersData.map(order => ({
-        ...order,
-        customerName: order.userDetails?.name || 'Unknown Customer',
-        customerPhone: order.userDetails?.phone || '',
-        createdAt: order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt),
-        totalAmount: order.pricing?.totalAmount || 0
-      }));
-      
-      setOrders(formattedOrders);
-      setIsLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [user?.id]);
+    return () => {
+      if (unsubscribe) {
+        console.log('🔌 OrdersManagement: Unsubscribing from orders');
+        unsubscribe();
+      }
+    };
+  }, [user?.uid]);
 
   // Filter orders based on status and search
   useEffect(() => {
@@ -137,13 +149,14 @@ export default function OrdersManagement() {
   }, [orders, statusFilter, searchQuery]);
 
   const handleStatusUpdate = async (orderId: string, newStatus: string) => {
-    if (!user?.id) return;
+    if (!user?.uid) return;
 
     try {
-      await updateOrderStatus(orderId, newStatus, user.id);
+      console.log('🔄 Updating order status:', orderId, 'to', newStatus);
+      await updateOrderStatus(orderId, newStatus, user.uid);
       toast.success(`Order status updated to ${newStatus}`);
     } catch (error) {
-      console.error('Error updating order status:', error);
+      console.error('❌ Error updating order status:', error);
       toast.error('Failed to update order status');
     }
   };
@@ -421,21 +434,45 @@ export default function OrdersManagement() {
                     </div>
                     
                     {/* Actions */}
-                    <div className="flex flex-col gap-3 lg:w-48">
+                    <div className="flex flex-col gap-3 lg:w-56">
                       <Button
                         variant="outline"
                         onClick={() => setSelectedOrder(order)}
-                        className="gap-2"
+                        className="gap-2 w-full"
                       >
                         <Eye className="w-4 h-4" />
                         View Details
                       </Button>
                       
+                      {/* Quick Status Dropdown - ALWAYS VISIBLE */}
+                      {!['collected', 'cancelled'].includes(order.status) && (
+                        <div className="space-y-2">
+                          <label className="text-xs font-medium text-gray-700">Update Status:</label>
+                          <Select 
+                            value={order.status} 
+                            onValueChange={(newStatus) => handleStatusUpdate(order.id, newStatus)}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="pending">Pending</SelectItem>
+                              <SelectItem value="accepted">Accepted</SelectItem>
+                              <SelectItem value="preparing">Preparing</SelectItem>
+                              <SelectItem value="ready">Ready</SelectItem>
+                              <SelectItem value="collected">Collected</SelectItem>
+                              <SelectItem value="cancelled">Cancelled</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                      
+                      {/* Status Update Buttons */}
                       {order.status === 'pending' && (
                         <>
                           <Button
                             onClick={() => handleStatusUpdate(order.id, 'accepted')}
-                            className="gap-2 bg-green-600 hover:bg-green-700"
+                            className="gap-2 w-full bg-green-600 hover:bg-green-700 text-white shadow-md"
                           >
                             <CheckCircle className="w-4 h-4" />
                             Accept Order
@@ -443,27 +480,59 @@ export default function OrdersManagement() {
                           <Button
                             variant="destructive"
                             onClick={() => handleStatusUpdate(order.id, 'cancelled')}
-                            className="gap-2"
+                            className="gap-2 w-full shadow-md"
                           >
                             <XCircle className="w-4 h-4" />
-                            Reject Order
+                            Reject
                           </Button>
                         </>
                       )}
                       
-                      {canUpdateStatus(order.status) && order.status !== 'pending' && (
+                      {order.status === 'accepted' && (
                         <Button
-                          onClick={() => {
-                            const nextStatus = getNextStatus(order.status);
-                            if (nextStatus) {
-                              handleStatusUpdate(order.id, nextStatus);
-                            }
-                          }}
-                          className="gap-2"
+                          onClick={() => handleStatusUpdate(order.id, 'preparing')}
+                          className="gap-2 w-full bg-orange-600 hover:bg-orange-700 text-white shadow-md"
+                        >
+                          <ChefHat className="w-4 h-4" />
+                          Start Preparing
+                        </Button>
+                      )}
+                      
+                      {order.status === 'preparing' && (
+                        <Button
+                          onClick={() => handleStatusUpdate(order.id, 'ready')}
+                          className="gap-2 w-full bg-green-600 hover:bg-green-700 text-white shadow-md"
+                        >
+                          <Package className="w-4 h-4" />
+                          Mark as Ready
+                        </Button>
+                      )}
+                      
+                      {order.status === 'ready' && (
+                        <Button
+                          onClick={() => handleStatusUpdate(order.id, 'collected')}
+                          className="gap-2 w-full bg-blue-600 hover:bg-blue-700 text-white shadow-md"
                         >
                           <CheckCircle className="w-4 h-4" />
-                          Mark as {getNextStatus(order.status)?.charAt(0).toUpperCase() + getNextStatus(order.status)?.slice(1)}
+                          Mark Collected
                         </Button>
+                      )}
+                      
+                      {['accepted', 'preparing', 'ready'].includes(order.status) && (
+                        <Button
+                          variant="outline"
+                          onClick={() => handleStatusUpdate(order.id, 'cancelled')}
+                          className="gap-2 w-full border-red-300 text-red-600 hover:bg-red-50"
+                        >
+                          <XCircle className="w-4 h-4" />
+                          Cancel
+                        </Button>
+                      )}
+                      
+                      {['collected', 'cancelled'].includes(order.status) && (
+                        <div className="text-xs text-center text-gray-500 py-2 bg-gray-50 rounded">
+                          Order {order.status}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -579,6 +648,132 @@ export default function OrdersManagement() {
                   </div>
                 </>
               )}
+              
+              {/* Status Update Section in Modal */}
+              <Separator />
+              <div>
+                <h4 className="font-semibold mb-3">Update Order Status</h4>
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="text-sm text-gray-600">Current Status:</span>
+                  <div className="flex items-center gap-2">
+                    {getStatusIcon(selectedOrder.status)}
+                    {getStatusBadge(selectedOrder.status)}
+                  </div>
+                </div>
+                
+                {/* Quick Status Dropdown in Modal */}
+                {!['collected', 'cancelled'].includes(selectedOrder.status) && (
+                  <div className="mb-4">
+                    <label className="text-sm font-medium text-gray-700 mb-2 block">Change Status To:</label>
+                    <Select 
+                      value={selectedOrder.status} 
+                      onValueChange={(newStatus) => {
+                        handleStatusUpdate(selectedOrder.id, newStatus);
+                        setSelectedOrder(null);
+                      }}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="accepted">Accepted</SelectItem>
+                        <SelectItem value="preparing">Preparing</SelectItem>
+                        <SelectItem value="ready">Ready</SelectItem>
+                        <SelectItem value="collected">Collected</SelectItem>
+                        <SelectItem value="cancelled">Cancelled</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                
+                <div className="grid grid-cols-2 gap-3">
+                  {selectedOrder.status === 'pending' && (
+                    <>
+                      <Button
+                        onClick={() => {
+                          handleStatusUpdate(selectedOrder.id, 'accepted');
+                          setSelectedOrder(null);
+                        }}
+                        className="gap-2 bg-green-600 hover:bg-green-700"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                        Accept Order
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        onClick={() => {
+                          handleStatusUpdate(selectedOrder.id, 'cancelled');
+                          setSelectedOrder(null);
+                        }}
+                        className="gap-2"
+                      >
+                        <XCircle className="w-4 h-4" />
+                        Reject Order
+                      </Button>
+                    </>
+                  )}
+                  
+                  {selectedOrder.status === 'accepted' && (
+                    <Button
+                      onClick={() => {
+                        handleStatusUpdate(selectedOrder.id, 'preparing');
+                        setSelectedOrder(null);
+                      }}
+                      className="gap-2 col-span-2"
+                    >
+                      <ChefHat className="w-4 h-4" />
+                      Start Preparing
+                    </Button>
+                  )}
+                  
+                  {selectedOrder.status === 'preparing' && (
+                    <Button
+                      onClick={() => {
+                        handleStatusUpdate(selectedOrder.id, 'ready');
+                        setSelectedOrder(null);
+                      }}
+                      className="gap-2 col-span-2 bg-green-600 hover:bg-green-700"
+                    >
+                      <Package className="w-4 h-4" />
+                      Mark as Ready
+                    </Button>
+                  )}
+                  
+                  {selectedOrder.status === 'ready' && (
+                    <Button
+                      onClick={() => {
+                        handleStatusUpdate(selectedOrder.id, 'collected');
+                        setSelectedOrder(null);
+                      }}
+                      className="gap-2 col-span-2 bg-blue-600 hover:bg-blue-700"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      Mark as Collected
+                    </Button>
+                  )}
+                  
+                  {['accepted', 'preparing', 'ready'].includes(selectedOrder.status) && (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        handleStatusUpdate(selectedOrder.id, 'cancelled');
+                        setSelectedOrder(null);
+                      }}
+                      className="gap-2 col-span-2 border-red-300 text-red-600 hover:bg-red-50"
+                    >
+                      <XCircle className="w-4 h-4" />
+                      Cancel Order
+                    </Button>
+                  )}
+                  
+                  {['collected', 'cancelled'].includes(selectedOrder.status) && (
+                    <div className="col-span-2 text-center text-sm text-gray-500 py-2">
+                      This order is {selectedOrder.status} and cannot be updated.
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </DialogContent>
         </Dialog>

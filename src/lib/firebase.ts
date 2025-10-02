@@ -456,8 +456,10 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
     
     if (userSnap.exists()) {
       const data = userSnap.data();
-      console.log('getUserProfile: Profile found:', data);
-      return data as UserProfile;
+      // IMPORTANT: Add the uid field since Firestore doesn't include document ID in data
+      const profileWithUid = { ...data, uid } as UserProfile;
+      console.log('getUserProfile: Profile found:', profileWithUid);
+      return profileWithUid;
     } else {
       console.log('getUserProfile: No profile document found for UID:', uid);
       return null;
@@ -1014,20 +1016,39 @@ export async function updateVendorProfile(vendorId: string, profileData: any): P
 
 // Get vendor orders with real-time updates
 export function getVendorOrdersRealtime(vendorId: string, callback: (orders: any[]) => void): () => void {
+  console.log('🔥 getVendorOrdersRealtime called with vendorId:', vendorId);
+  
   const ordersRef = collection(db, 'orders');
   let q = query(
     ordersRef,
-    where('restaurantId', '==', vendorId),
-    orderBy('createdAt', 'desc')
+    where('restaurantId', '==', vendorId)
   );
   
-  return onSnapshot(q, (snapshot) => {
-    const orders = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-    callback(orders);
-  });
+  return onSnapshot(
+    q, 
+    (snapshot) => {
+      console.log('📦 onSnapshot triggered, docs count:', snapshot.docs.length);
+      const orders = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      
+      // Sort in memory to avoid composite index requirement
+      orders.sort((a, b) => {
+        const aTime = a.createdAt?.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt).getTime();
+        const bTime = b.createdAt?.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt).getTime();
+        return bTime - aTime; // Descending order (newest first)
+      });
+      
+      console.log('✅ Calling callback with orders:', orders.length);
+      callback(orders);
+    },
+    (error) => {
+      console.error('❌ onSnapshot error:', error);
+      // Call callback with empty array on error to prevent infinite loading
+      callback([]);
+    }
+  );
 }
 
 // Update order status for vendors
@@ -1828,6 +1849,7 @@ export async function getPlatformSettings() {
 // Add missing vendor management functions
 export async function getAllVendors(status?: string) {
   try {
+    console.log('getAllVendors: Fetching vendors with status:', status);
     let vendorQuery: any = collection(db, 'users');
     const constraints = [where('role', '==', 'vendor')];
     
@@ -1835,10 +1857,43 @@ export async function getAllVendors(status?: string) {
       constraints.push(where('status', '==', status));
     }
     
-    vendorQuery = query(vendorQuery, ...constraints, orderBy('createdAt', 'desc'));
-    
-    const snapshot = await getDocs(vendorQuery);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
+    // Try with orderBy first, fallback to without orderBy if index doesn't exist
+    try {
+      vendorQuery = query(vendorQuery, ...constraints, orderBy('createdAt', 'desc'));
+      const snapshot = await getDocs(vendorQuery);
+      const vendors = snapshot.docs.map(doc => ({ 
+        id: doc.id, 
+        ...doc.data(),
+        email: doc.data().email || '',
+        name: doc.data().name || doc.data().displayName || '',
+        displayName: doc.data().displayName || doc.data().name || '',
+        businessName: doc.data().businessName || '',
+        phone: doc.data().phone || '',
+        status: doc.data().status || 'active'
+      }));
+      console.log('getAllVendors: Found', vendors.length, 'vendors');
+      return vendors;
+    } catch (indexError: any) {
+      // If index error, try without orderBy
+      if (indexError.code === 'failed-precondition' || indexError.message?.includes('index')) {
+        console.log('getAllVendors: Index not found, fetching without orderBy');
+        vendorQuery = query(vendorQuery, ...constraints);
+        const snapshot = await getDocs(vendorQuery);
+        const vendors = snapshot.docs.map(doc => ({ 
+          id: doc.id, 
+          ...doc.data(),
+          email: doc.data().email || '',
+          name: doc.data().name || doc.data().displayName || '',
+          displayName: doc.data().displayName || doc.data().name || '',
+          businessName: doc.data().businessName || '',
+          phone: doc.data().phone || '',
+          status: doc.data().status || 'active'
+        }));
+        console.log('getAllVendors: Found', vendors.length, 'vendors (without orderBy)');
+        return vendors;
+      }
+      throw indexError;
+    }
   } catch (error) {
     console.error('Error getting vendors:', error);
     throw error;
@@ -1946,7 +2001,9 @@ export async function getVendorStats(vendorId: string) {
     }
     
     const userData = userSnap.data();
-    const restaurantId = userData.restaurantId;
+    const restaurantId = userData.restaurantId || vendorId; // Fallback to vendorId if no restaurantId
+    
+    console.log('📊 getVendorStats: Using restaurantId:', restaurantId);
     
     // Get vendor orders using restaurantId
     const ordersQuery = query(
@@ -3788,38 +3845,38 @@ export async function getPasswordResetLogs() {
 }
 
 /**
- * Get vendor information for password reset (without password)
- * Returns safe vendor data that can be displayed to admin
+ * Get vendor information for password reset
  */
 export async function getVendorInfoForPasswordReset(email: string) {
   try {
-    console.log('getVendorInfoForPasswordReset: Getting vendor info for:', email);
+    console.log('getVendorInfoForPasswordReset: Looking up vendor with email:', email);
     
-    const vendorQuery = query(
+    // Query users collection for vendor with this email
+    const usersQuery = query(
       collection(db, 'users'),
       where('email', '==', email),
       where('role', '==', 'vendor')
     );
     
-    const vendorSnapshot = await getDocs(vendorQuery);
+    const usersSnapshot = await getDocs(usersQuery);
     
-    if (vendorSnapshot.empty) {
+    if (usersSnapshot.empty) {
+      console.log('getVendorInfoForPasswordReset: No vendor found with email:', email);
       return null;
     }
     
-    const vendorDoc = vendorSnapshot.docs[0];
+    const vendorDoc = usersSnapshot.docs[0];
     const vendorData = vendorDoc.data();
     
-    // Return only safe, non-sensitive information
+    console.log('getVendorInfoForPasswordReset: Found vendor:', vendorData.businessName);
+    
     return {
       id: vendorDoc.id,
-      name: vendorData.name || 'Unknown',
       email: vendorData.email,
-      role: vendorData.role,
-      createdAt: vendorData.createdAt,
-      isActive: vendorData.isActive
+      businessName: vendorData.businessName || vendorData.name,
+      phone: vendorData.phone,
+      status: vendorData.status || 'active'
     };
-    
   } catch (error) {
     console.error('Error getting vendor info for password reset:', error);
     throw error;

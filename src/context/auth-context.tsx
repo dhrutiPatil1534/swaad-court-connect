@@ -55,8 +55,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const userDoc = await getDoc(doc(db, 'users', uid));
       if (userDoc.exists()) {
         const userData = userDoc.data() as UserData;
-        console.log('AuthContext: Profile found:', userData);
-        return userData;
+        // IMPORTANT: Add the uid field since Firestore doesn't include document ID in data
+        const userWithUid = { ...userData, uid };
+        console.log('AuthContext: Profile found:', userWithUid);
+        return userWithUid;
       } else {
         console.log('AuthContext: No profile document found for UID:', uid);
         return null;
