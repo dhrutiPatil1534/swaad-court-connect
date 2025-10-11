@@ -3693,6 +3693,232 @@ export async function getAllCustomersForAdmin() {
   }
 }
 
+// Search Functions
+export async function searchRestaurants(searchQuery: string, filters: any) {
+  try {
+    console.log('searchRestaurants: Searching with query:', searchQuery, 'filters:', filters);
+    
+    // Get all restaurants
+    const restaurantsRef = collection(db, 'restaurants');
+    const q = query(restaurantsRef, where('isActive', '==', true));
+    const snapshot = await getDocs(q);
+    
+    let restaurants = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as any[];
+    
+    // Apply search query filter
+    if (searchQuery) {
+      const lowerQuery = searchQuery.toLowerCase();
+      restaurants = restaurants.filter(restaurant => 
+        restaurant.name?.toLowerCase().includes(lowerQuery) ||
+        restaurant.cuisine?.toLowerCase().includes(lowerQuery) ||
+        restaurant.description?.toLowerCase().includes(lowerQuery)
+      );
+    }
+    
+    // Apply cuisine filter
+    if (filters.cuisine && filters.cuisine.length > 0) {
+      restaurants = restaurants.filter(restaurant =>
+        filters.cuisine.some((c: string) => 
+          restaurant.cuisine?.toLowerCase().includes(c.toLowerCase())
+        )
+      );
+    }
+    
+    // Apply rating filter
+    if (filters.minRating > 0) {
+      restaurants = restaurants.filter(restaurant => 
+        (restaurant.rating || 0) >= filters.minRating
+      );
+    }
+    
+    // Apply delivery time filter
+    if (filters.maxDeliveryTime < 60) {
+      restaurants = restaurants.filter(restaurant => 
+        (restaurant.deliveryTime || 0) <= filters.maxDeliveryTime
+      );
+    }
+    
+    // Apply veg only filter
+    if (filters.vegOnly) {
+      restaurants = restaurants.filter(restaurant => 
+        restaurant.isVeg === true || restaurant.vegOnly === true
+      );
+    }
+    
+    console.log('searchRestaurants: Found', restaurants.length, 'restaurants');
+    return restaurants;
+  } catch (error) {
+    console.error('Error searching restaurants:', error);
+    throw error;
+  }
+}
+
+export async function searchMenuItems(searchQuery: string, filters: any) {
+  try {
+    console.log('searchMenuItems: Searching with query:', searchQuery, 'filters:', filters);
+    
+    // Get all restaurants first
+    const restaurantsRef = collection(db, 'restaurants');
+    const restaurantsSnapshot = await getDocs(restaurantsRef);
+    
+    const allMenuItems: any[] = [];
+    
+    // For each restaurant, get its menu items from subcollection
+    for (const restaurantDoc of restaurantsSnapshot.docs) {
+      const restaurantData = restaurantDoc.data();
+      const menuRef = collection(db, 'restaurants', restaurantDoc.id, 'menu');
+      const menuSnapshot = await getDocs(menuRef);
+      
+      menuSnapshot.docs.forEach(menuDoc => {
+        const menuItem = {
+          id: menuDoc.id,
+          restaurantId: restaurantDoc.id,
+          restaurantName: restaurantData.name,
+          ...menuDoc.data()
+        };
+        allMenuItems.push(menuItem);
+      });
+    }
+    
+    let filteredItems = allMenuItems;
+    
+    // Apply search query filter
+    if (searchQuery) {
+      const lowerQuery = searchQuery.toLowerCase();
+      filteredItems = filteredItems.filter(item => 
+        item.name?.toLowerCase().includes(lowerQuery) ||
+        item.description?.toLowerCase().includes(lowerQuery) ||
+        item.category?.toLowerCase().includes(lowerQuery)
+      );
+    }
+    
+    // Apply price range filter
+    if (filters.priceRange) {
+      filteredItems = filteredItems.filter(item => 
+        item.price >= filters.priceRange[0] && item.price <= filters.priceRange[1]
+      );
+    }
+    
+    // Apply veg only filter
+    if (filters.vegOnly) {
+      filteredItems = filteredItems.filter(item => item.isVeg === true);
+    }
+    
+    // Apply availability filter
+    filteredItems = filteredItems.filter(item => item.available !== false);
+    
+    console.log('searchMenuItems: Found', filteredItems.length, 'menu items');
+    return filteredItems;
+  } catch (error) {
+    console.error('Error searching menu items:', error);
+    throw error;
+  }
+}
+
+export async function getTopRatedRestaurants(limitCount: number = 5) {
+  try {
+    console.log('getTopRatedRestaurants: Fetching top', limitCount, 'restaurants');
+    
+    const restaurantsRef = collection(db, 'restaurants');
+    const q = query(
+      restaurantsRef,
+      where('isActive', '==', true),
+      orderBy('rating', 'desc'),
+      limit(limitCount)
+    );
+    
+    const snapshot = await getDocs(q);
+    const restaurants = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    
+    console.log('getTopRatedRestaurants: Found', restaurants.length, 'restaurants');
+    return restaurants;
+  } catch (error) {
+    console.error('Error fetching top rated restaurants:', error);
+    // Fallback: get all restaurants and sort by rating
+    try {
+      const restaurantsRef = collection(db, 'restaurants');
+      const q = query(restaurantsRef, where('isActive', '==', true));
+      const snapshot = await getDocs(q);
+      
+      const restaurants = snapshot.docs
+        .map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }))
+        .sort((a: any, b: any) => (b.rating || 0) - (a.rating || 0))
+        .slice(0, limitCount);
+      
+      return restaurants;
+    } catch (fallbackError) {
+      console.error('Error in fallback for top rated restaurants:', fallbackError);
+      return [];
+    }
+  }
+}
+
+export async function getTrendingRestaurants(limitCount: number = 5) {
+  try {
+    console.log('getTrendingRestaurants: Fetching top', limitCount, 'trending restaurants');
+    
+    // Get restaurants with most recent orders
+    const ordersRef = collection(db, 'orders');
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    const q = query(
+      ordersRef,
+      where('createdAt', '>=', Timestamp.fromDate(thirtyDaysAgo)),
+      orderBy('createdAt', 'desc')
+    );
+    
+    const snapshot = await getDocs(q);
+    
+    // Count orders per restaurant
+    const restaurantOrderCounts = new Map<string, number>();
+    snapshot.docs.forEach(doc => {
+      const orderData = doc.data();
+      const restaurantId = orderData.restaurantId;
+      if (restaurantId) {
+        restaurantOrderCounts.set(
+          restaurantId,
+          (restaurantOrderCounts.get(restaurantId) || 0) + 1
+        );
+      }
+    });
+    
+    // Get top restaurant IDs
+    const topRestaurantIds = Array.from(restaurantOrderCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, limitCount)
+      .map(([id]) => id);
+    
+    // Fetch restaurant details
+    const restaurants = [];
+    for (const restaurantId of topRestaurantIds) {
+      const restaurantDoc = await getDoc(doc(db, 'restaurants', restaurantId));
+      if (restaurantDoc.exists()) {
+        restaurants.push({
+          id: restaurantDoc.id,
+          ...restaurantDoc.data()
+        });
+      }
+    }
+    
+    console.log('getTrendingRestaurants: Found', restaurants.length, 'trending restaurants');
+    return restaurants;
+  } catch (error) {
+    console.error('Error fetching trending restaurants:', error);
+    // Fallback: return top rated restaurants
+    return getTopRatedRestaurants(limitCount);
+  }
+}
+
 // Update customer status for admin management
 export async function updateCustomerStatus(userId: string, status: 'active' | 'suspended' | 'banned') {
   try {
@@ -3837,48 +4063,11 @@ export async function getPasswordResetLogs() {
     
     console.log('getPasswordResetLogs: Retrieved', logs.length, 'password reset logs');
     return logs;
-    
   } catch (error) {
     console.error('Error fetching password reset logs:', error);
-    throw error;
+    return [];
   }
 }
 
-/**
- * Get vendor information for password reset
- */
-export async function getVendorInfoForPasswordReset(email: string) {
-  try {
-    console.log('getVendorInfoForPasswordReset: Looking up vendor with email:', email);
-    
-    // Query users collection for vendor with this email
-    const usersQuery = query(
-      collection(db, 'users'),
-      where('email', '==', email),
-      where('role', '==', 'vendor')
-    );
-    
-    const usersSnapshot = await getDocs(usersQuery);
-    
-    if (usersSnapshot.empty) {
-      console.log('getVendorInfoForPasswordReset: No vendor found with email:', email);
-      return null;
-    }
-    
-    const vendorDoc = usersSnapshot.docs[0];
-    const vendorData = vendorDoc.data();
-    
-    console.log('getVendorInfoForPasswordReset: Found vendor:', vendorData.businessName);
-    
-    return {
-      id: vendorDoc.id,
-      email: vendorData.email,
-      businessName: vendorData.businessName || vendorData.name,
-      phone: vendorData.phone,
-      status: vendorData.status || 'active'
-    };
-  } catch (error) {
-    console.error('Error getting vendor info for password reset:', error);
-    throw error;
-  }
-}
+// Re-export vendor info function
+export { getVendorInfoForPasswordReset } from './firebase-vendor-info';

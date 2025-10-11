@@ -20,6 +20,7 @@ import Profile from "./pages/Profile";
 import AdminPanel from "./pages/AdminPanel";
 import VendorDashboard from "./pages/VendorDashboard";
 import NotFound from "./pages/NotFound";
+import SearchPage from "./pages/Search";
 
 const queryClient = new QueryClient();
 
@@ -120,9 +121,7 @@ const App = () => (
                   path="/search" 
                   element={
                     <AppLayout>
-                      <div className="container mx-auto px-4 py-8">
-                        <h1 className="text-3xl font-bold">Search - Coming Soon</h1>
-                      </div>
+                      <SearchPage />
                     </AppLayout>
                   } 
                 />
